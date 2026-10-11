@@ -1,0 +1,73 @@
+{
+  "name": "third-eye",
+  "version": "1.0.0",
+  "description": "THIRD EYE — AI-Native Terminal Workspace powered by Electron, node-pty, and GPT-4o diagnostics",
+  "main": "electron/main.js",
+  "private": true,
+  "workspaces": [
+    "Frontend/guide-build-main",
+    "backend/*"
+  ],
+  "scripts": {
+    "start": "electron .",
+    "dev": "concurrently -k -n \"PTY-SVC,AI-SVC,SF-SVC,FRONTEND,ELECTRON\" -c \"blue,green,yellow,magenta,cyan\" \"npm --prefix backend/pty-service run start\" \"npm --prefix backend/ai-service run start\" \"npm --prefix backend/salesforce-service run start\" \"npm --prefix Frontend/guide-build-main run dev\" \"electron .\"",
+    "dev:full": "concurrently -k -n \"PTY-SVC,AI-SVC,SF-SVC,FRONTEND,ELECTRON\" -c \"blue,green,yellow,magenta,cyan\" \"npm --prefix backend/pty-service run start\" \"npm --prefix backend/ai-service run start\" \"npm --prefix backend/salesforce-service run start\" \"npm --prefix Frontend/guide-build-main run dev\" \"electron .\"",
+    "dev:frontend": "npm --prefix Frontend/guide-build-main run dev",
+    "dev:electron": "electron .",
+    "dev:backend": "concurrently -k -n \"PTY,AI,SF\" -c \"blue,green,yellow\" \"npm --prefix backend/pty-service run start\" \"npm --prefix backend/ai-service run start\" \"npm --prefix backend/salesforce-service run start\"",
+    "dev:salesforce": "npm --prefix backend/salesforce-service run start",
+    "build:frontend": "npm --prefix Frontend/guide-build-main run build",
+    "build:electron": "electron-builder",
+    "build": "npm run build:frontend && npm run build:electron",
+    "rebuild": "electron-rebuild -f -w node-pty",
+    "postinstall": "node -e \"console.log('Dependencies verified')\""
+  },
+  "keywords": [
+    "terminal",
+    "pty",
+    "ai",
+    "electron",
+    "devops",
+    "third-eye"
+  ],
+  "author": "THIRD EYE Team",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "node-pty": "^1.0.0",
+    "openai": "^4.38.0"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^3.6.0",
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^29.1.5",
+    "electron-builder": "^24.13.3",
+    "wait-on": "^7.2.0"
+  },
+  "build": {
+    "appId": "com.thirdeye.ide",
+    "productName": "THIRD EYE",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "electron/**/*",
+      "Frontend/guide-build-main/dist/**/*",
+      "Frontend/guide-build-main/.output/**/*",
+      ".env",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg",
+      "category": "public.app-category.developer-tools"
+    },
+    "linux": {
+      "target": "AppImage",
+      "category": "Development"
+    }
+  }
+}

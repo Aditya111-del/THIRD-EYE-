@@ -1,0 +1,295 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+@import "tailwindcss" source(none);
+@source "../src";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", Consolas, "SF Mono", monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: transparent;
+  --color-stage: var(--stage);
+  --color-panel: var(--panel);
+  --color-online: var(--online);
+  --color-offline: var(--offline);
+  --color-warn: var(--warn);
+  --color-term-prompt: var(--term-prompt);
+  --color-term-path: var(--term-path);
+  --color-term-info: var(--term-info);
+}
+
+:root {
+  --radius: 0.25rem;
+  --background: #161616;
+  --panel: #222222;
+  --stage: #222222;
+  --foreground: #E0E0E0;
+  --card: #252525;
+  --card-foreground: #E0E0E0;
+  --popover: #222222;
+  --popover-foreground: #E0E0E0;
+  --primary: #FF6B00;
+  --primary-foreground: #ffffff;
+  --secondary: #252525;
+  --secondary-foreground: #E0E0E0;
+  --muted: #181818;
+  --muted-foreground: #808080;
+  --accent: #2A2A2A;
+  --accent-foreground: #E0E0E0;
+  --destructive: #ea580c;
+  --destructive-foreground: #ffffff;
+  --border: #303030;
+  --input: #2A2A2A;
+  --ring: transparent;
+  --online: #FF6B00;
+  --offline: #808080;
+  --warn: #fb923c;
+  --term-prompt: #FF6B00;
+  --term-path: #808080;
+  --term-info: #808080;
+
+  /* Rings and text-shadow cleanup (no neon text glows) */
+  --tw-ring-color: transparent !important;
+  --tw-ring-offset-color: transparent !important;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+  *, *::before, *::after {
+    text-shadow: none !important;
+    -webkit-tap-highlight-color: transparent;
+  }
+  *:focus, *:focus-visible {
+    outline: none !important;
+  }
+  html, body {
+    height: 100%;
+    background-color: #161616;
+    color: #E0E0E0;
+  }
+  body {
+    font-family: var(--font-sans);
+    letter-spacing: -0.015em;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  button, input, textarea, select {
+    outline: none !important;
+  }
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #161616;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #303030;
+    border-radius: 2px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #404040;
+  }
+}
+
+/* =========================================================================
+   HARD FABRIC TACTILE SURFACE DEPTH (NO OUTLINE BORDERS, NATURAL SHADOWS)
+   ========================================================================= */
+.fabric-card {
+  background-color: #202020 !important;
+  border: none !important;
+  box-shadow: 0 6px 18px -2px rgba(0, 0, 0, 0.65), 0 2px 6px -1px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;
+}
+
+.fabric-card:hover {
+  background-color: #252525 !important;
+  box-shadow: 0 8px 24px -2px rgba(0, 0, 0, 0.75), 0 3px 8px -1px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.09) !important;
+}
+
+.fabric-card-active {
+  background-color: #241D17 !important;
+  border: none !important;
+  box-shadow: 0 6px 18px -2px rgba(0, 0, 0, 0.7), 0 2px 6px -1px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 107, 0, 0.28) !important;
+}
+
+.fabric-btn {
+  background-color: #2C2C2C !important;
+  border: none !important;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.fabric-btn:hover {
+  background-color: #FF6B00 !important;
+  color: #ffffff !important;
+  box-shadow: 0 3px 12px rgba(255, 107, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;
+}
+
+.fabric-tag {
+  background-color: #161616 !important;
+  border: none !important;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.65) !important;
+}
+
+.fabric-tab-active {
+  background-color: #242424 !important;
+  border: none !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+.fabric-tab-inactive {
+  background-color: #181818 !important;
+  border: none !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
+}
+.fabric-tab-inactive:hover {
+  background-color: #1F1F1F !important;
+}
+
+/* =========================================================================
+   XTERM.JS CORE STYLES & BULLETPROOF HIGH-CONTRAST CURSOR
+   ========================================================================= */
+.xterm {
+  position: relative;
+  user-select: none;
+  -ms-user-select: none;
+  -webkit-user-select: none;
+  cursor: text;
+}
+.xterm.focus,
+.xterm:focus {
+  outline: none !important;
+}
+.xterm .xterm-helpers {
+  position: absolute;
+  top: 0;
+  z-index: 5;
+}
+.xterm .xterm-helper-textarea {
+  padding: 0;
+  border: 0;
+  margin: 0;
+  position: absolute;
+  opacity: 0;
+  left: -9999em;
+  top: 0;
+  width: 0;
+  height: 0;
+  z-index: -5;
+  white-space: nowrap;
+  overflow: hidden;
+  resize: none;
+}
+.xterm .composition-view {
+  background: #000;
+  color: #FFF;
+  z-index: 1;
+  top: 0;
+  left: 0;
+}
+.xterm .composition-view.terminated {
+  display: none;
+}
+.xterm .xterm-viewport {
+  background-color: transparent;
+  overflow-y: scroll;
+  cursor: default;
+  position: absolute;
+  right: 0;
+  left: 0;
+  top: 0;
+  bottom: 0;
+}
+.xterm .xterm-viewport::-webkit-scrollbar {
+  width: 5px;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-track {
+  background: transparent;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background: #333333;
+  border-radius: 2px;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: #555555;
+}
+.xterm .xterm-screen {
+  position: relative;
+}
+.xterm .xterm-screen canvas {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+.xterm-scroll-area {
+  visibility: hidden;
+}
+.xterm-char-measure-element {
+  display: inline-block;
+  visibility: hidden;
+  position: absolute;
+  top: 0;
+  left: -9999em;
+  line-height: normal;
+}
+.xterm .xterm-cursor-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+/* Antigravity IDE Window Title Bar Drag Regions */
+.app-drag-region {
+  -webkit-app-region: drag;
+  user-select: none;
+}
+
+.app-no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* =========================================================================
+   AI CHAT MESSAGE SMOOTH FADE ANIMATION
+   ========================================================================= */
+@keyframes aiMessageFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.ai-message-fade {
+  animation: aiMessageFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: opacity, transform;
+}
+
+

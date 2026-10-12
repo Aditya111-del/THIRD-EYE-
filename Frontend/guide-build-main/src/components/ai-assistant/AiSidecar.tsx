@@ -459,6 +459,7 @@ export function AiSidecar({
     { id: "python-development", name: "python-development", description: "Python engineering & script execution", tools: ["readFile", "runTerminal"] },
   ]);
   const [skillsOpen, setSkillsOpen] = useState(false);
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false);
 
   useEffect(() => {
     fetch("http://localhost:4002/api/ai/skills")
@@ -1529,107 +1530,129 @@ export function AiSidecar({
   return (
     <aside className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-[#181818] border-l border-[#262626] font-sans select-none text-[#D0D0D8]">
       {/* ── 1. Top Header (Minimal & Clean matching Filesystem Sidebar) ── */}
-      <div className="relative flex h-[35px] shrink-0 items-center justify-between border-b border-[#262626] bg-[#181818] px-3 select-none">
-        <div className="flex items-center gap-2">
+      <div className="relative flex h-[35px] shrink-0 items-center justify-between border-b border-[#262626] bg-[#181818] px-2 select-none overflow-hidden">
+        {/* Left: Agents label + count */}
+        <div className="flex items-center gap-2 shrink-0">
           <span className="text-[12.5px] font-medium text-zinc-200 tracking-tight">Agents</span>
           <span className="px-1.5 py-0.2 text-[10px] font-mono font-medium rounded-full bg-white/[0.06] text-zinc-400 border border-white/[0.04]">
             {agentSessions.length}
           </span>
         </div>
 
-        <div className="flex items-center gap-1 text-zinc-400">
-          {/* Active Skills Button */}
+        {/* Right: Action buttons — always fit without clipping */}
+        <div className="flex items-center gap-0.5 text-zinc-400 min-w-0 shrink-0">
+          {/* Skills (icon-only to save space) */}
           <button
             onClick={() => setSkillsOpen((p) => !p)}
             className={cn(
-              "flex items-center gap-1.5 px-2 py-1 rounded text-[11px] transition-colors cursor-pointer",
+              "flex items-center gap-1 px-1.5 py-1 rounded text-[11px] transition-colors cursor-pointer shrink-0",
               skillsOpen ? "text-zinc-100 bg-white/[0.08]" : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.05]"
             )}
-            title="Discovered Agent Skills"
+            title={`${availableSkills.length} Skills`}
           >
             <Sparkles className="h-3 w-3 text-zinc-400 shrink-0" />
-            <span>{availableSkills.length} Skills</span>
+            <span className="hidden [@media(min-width:380px)]:inline text-[10.5px]">{availableSkills.length}</span>
           </button>
 
-          {/* Artifacts Button */}
+          {/* Artifacts (icon-only) */}
           <button
             onClick={() => setArtifactsModalOpen(true)}
-            className="flex items-center gap-1.5 px-2 py-1 rounded text-[11px] text-zinc-300 hover:text-white hover:bg-white/[0.05] transition-colors cursor-pointer"
+            className="relative flex items-center gap-1 px-1.5 py-1 rounded text-[11px] text-zinc-400 hover:text-white hover:bg-white/[0.05] transition-colors cursor-pointer shrink-0"
             title="Open Artifacts"
           >
-            <Layers className="h-3.5 w-3.5 text-zinc-400" />
-            <span>Artifacts</span>
+            <Layers className="h-3.5 w-3.5 shrink-0" />
             {artifacts.length > 0 && (
-              <span className="w-1.5 h-1.5 rounded-full bg-zinc-400" />
+              <span className="absolute top-1 right-1 w-1 h-1 rounded-full bg-zinc-400" />
             )}
           </button>
 
-          <div className="h-3.5 w-px bg-white/[0.08] mx-0.5" />
+          <div className="h-3.5 w-px bg-white/[0.08] mx-0.5 shrink-0" />
 
-          {/* Filter icon */}
-          <button
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.05] transition-colors cursor-pointer"
-            title="Filter agents"
-          >
-            <Filter className="h-3.5 w-3.5" />
-          </button>
-
-          {/* Activity Feed icon */}
-          <button
-            onClick={() => setActivityFeedOpen(true)}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.05] transition-colors cursor-pointer"
-            title="Agent Activity Feed"
-          >
-            <Activity className="h-3.5 w-3.5" />
-          </button>
-
-          {/* Undo Last Checkpoint */}
-          <button
-            onClick={handleUndoLastAction}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.05] transition-colors cursor-pointer"
-            title="Undo Last Agent Action"
-          >
-            <Undo2 className="h-3.5 w-3.5" />
-          </button>
-
-          {/* Revert Session Checkpoints */}
-          <button
-            onClick={handleRevertSession}
-            className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.05] transition-colors cursor-pointer"
-            title="Revert All Agent Changes This Session"
-          >
-            <RotateCcw className="h-3.5 w-3.5" />
-          </button>
-
-          {/* Proposed Diffs Review Badge if any */}
+          {/* Diffs badge (only when there are diffs) */}
           {activeDiffs && activeDiffs.length > 0 && (
             <button
               onClick={() => setDiffModalOpen(true)}
-              className="flex items-center gap-1 px-2 py-0.5 rounded text-[10.5px] font-mono bg-white/[0.05] border border-white/[0.08] text-zinc-300 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer"
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono bg-white/[0.05] border border-white/[0.08] text-zinc-300 hover:text-white hover:bg-white/[0.08] transition-colors cursor-pointer shrink-0"
+              title="Review proposed diffs"
             >
               <FileCode className="h-3 w-3 text-zinc-400" />
-              <span>Diffs ({activeDiffs.length})</span>
+              <span>{activeDiffs.length}</span>
             </button>
           )}
 
-          {/* New Agent Button (Polished, Single Line, Non-wrapping) */}
+          {/* More actions dropdown (Filter / Activity / Undo / Revert) */}
+          <div className="relative shrink-0">
+            <button
+              onClick={() => setMoreMenuOpen((p) => !p)}
+              className={cn(
+                "p-1 rounded transition-colors cursor-pointer shrink-0",
+                moreMenuOpen ? "text-zinc-100 bg-white/[0.08]" : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.05]"
+              )}
+              title="More actions"
+            >
+              <MoreHorizontal className="h-3.5 w-3.5" />
+            </button>
+
+            {moreMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMoreMenuOpen(false)} />
+                <div className="absolute right-0 top-full mt-1 z-50 min-w-[160px] rounded-[7px] bg-[#1A1B22] border border-[#2E2E38] shadow-2xl p-1 text-[12px]">
+                  <button
+                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded hover:bg-white/[0.05] text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                    title="Filter agents"
+                    onClick={() => setMoreMenuOpen(false)}
+                  >
+                    <Filter className="h-3.5 w-3.5 shrink-0" />
+                    <span>Filter Agents</span>
+                  </button>
+                  <button
+                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded hover:bg-white/[0.05] text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                    title="Agent Activity Feed"
+                    onClick={() => { setActivityFeedOpen(true); setMoreMenuOpen(false); }}
+                  >
+                    <Activity className="h-3.5 w-3.5 shrink-0" />
+                    <span>Activity Feed</span>
+                  </button>
+                  <div className="my-1 h-px bg-white/[0.06]" />
+                  <button
+                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded hover:bg-white/[0.05] text-zinc-300 hover:text-white transition-colors cursor-pointer"
+                    title="Undo Last Agent Action"
+                    onClick={() => { handleUndoLastAction(); setMoreMenuOpen(false); }}
+                  >
+                    <Undo2 className="h-3.5 w-3.5 shrink-0" />
+                    <span>Undo Last Action</span>
+                  </button>
+                  <button
+                    className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded hover:bg-rose-500/10 text-zinc-300 hover:text-rose-400 transition-colors cursor-pointer"
+                    title="Revert All Agent Changes This Session"
+                    onClick={() => { handleRevertSession(); setMoreMenuOpen(false); }}
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 shrink-0" />
+                    <span>Revert Session</span>
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* New Agent Button — always visible, shrink-0 */}
           <button
             onClick={handleCreateAgent}
-            className="flex items-center gap-1.5 h-[24px] px-2.5 rounded-[5px] bg-[#222228] hover:bg-[#2A2A32] text-[#E0E0E8] hover:text-white border border-[#353540] hover:border-[#484858] text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 shadow-xs ml-1"
+            className="flex items-center gap-1 h-[22px] pl-1.5 pr-2 rounded-[5px] bg-[#222228] hover:bg-[#2A2A32] text-[#E0E0E8] hover:text-white border border-[#353540] hover:border-[#484858] text-[11px] font-medium transition-colors cursor-pointer whitespace-nowrap shrink-0 shadow-xs ml-0.5"
             title="Create New Agent"
           >
-            <Plus className="h-3.5 w-3.5 text-[#A0A0B0] shrink-0" />
-            <span className="whitespace-nowrap leading-none">New Agent</span>
+            <Plus className="h-3 w-3 text-[#A0A0B0] shrink-0" />
+            <span className="whitespace-nowrap leading-none hidden [@media(min-width:340px)]:inline">New Agent</span>
           </button>
 
-          {/* Close icon */}
+          {/* Close icon — pinned far right, always visible */}
           {onClose && (
             <button
               onClick={onClose}
-              className="p-1 rounded text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.05] transition-colors cursor-pointer ml-0.5"
+              className="p-1 rounded text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.05] transition-colors cursor-pointer shrink-0"
               title="Close panel"
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
             </button>
           )}
         </div>
@@ -1641,7 +1664,7 @@ export function AiSidecar({
               className="fixed inset-0 z-40"
               onClick={() => setSkillsOpen(false)}
             />
-            <div className="absolute left-3 right-3 top-full mt-1.5 rounded-lg bg-[#141518]/95 backdrop-blur-md border border-white/[0.08] p-3 shadow-2xl z-50 text-[11.5px] space-y-2 select-text max-h-[70vh] flex flex-col">
+            <div className="absolute left-2 right-2 top-full mt-1.5 rounded-lg bg-[#141518]/95 backdrop-blur-md border border-white/[0.08] p-3 shadow-2xl z-50 text-[11.5px] space-y-2 select-text max-h-[70vh] flex flex-col">
               <div className="flex items-center justify-between pb-1.5 border-b border-white/[0.06] text-zinc-200 font-medium shrink-0">
                 <div className="flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5 text-zinc-400" />
@@ -1928,17 +1951,17 @@ export function AiSidecar({
           />
 
           {/* Bottom Toolbar inside Input Card */}
-          <div className="flex items-center justify-between pt-2 border-t border-[#282830] mt-1">
+          <div className="flex items-center justify-between pt-2 border-t border-[#282830] mt-1 gap-2">
             {/* Left Controls: Model Pill | Pencil | Attach */}
-            <div className="flex items-center gap-2 text-[11px] text-[#8E8E98] select-none">
+            <div className="flex items-center gap-1.5 text-[11px] text-[#8E8E98] select-none min-w-0 overflow-hidden">
               {/* Model Selector Pill */}
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setModelMenuOpen((p) => !p)}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[#26262C] hover:bg-[#2F2F36] hover:text-white text-[#C0C0C8] border border-[#363640] cursor-pointer transition-colors text-[11px]"
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[#26262C] hover:bg-[#2F2F36] hover:text-white text-[#C0C0C8] border border-[#363640] cursor-pointer transition-colors text-[11px] max-w-[120px]"
                 >
-                  <span>{selectedModel}</span>
+                  <span className="truncate">{selectedModel}</span>
                   <ChevronDown className="h-3 w-3 opacity-70" />
                 </button>
 
@@ -1983,12 +2006,12 @@ export function AiSidecar({
               </button>
             </div>
 
-            {/* Right: Send / Stop button */}
+            {/* Right: Send / Stop button — always shrink-0 so it's never clipped */}
             {loading ? (
               <button
                 type="button"
                 onClick={handleStopAgent}
-                className="p-1.5 rounded-md bg-rose-600 hover:bg-rose-500 text-white transition-all cursor-pointer shadow-sm flex items-center justify-center"
+                className="p-1.5 rounded-md bg-rose-600 hover:bg-rose-500 text-white transition-all cursor-pointer shadow-sm flex items-center justify-center shrink-0"
                 title="Stop generation"
               >
                 <Square className="h-3.5 w-3.5 fill-current" />

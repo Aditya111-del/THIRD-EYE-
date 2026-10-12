@@ -409,7 +409,7 @@ export function MainLayout() {
             {showRightSidebar && (
               <>
                 <ResizableHandle withHandle />
-                <ResizablePanel defaultSize="30%" minSize="22%" maxSize="45%" className="min-w-0 overflow-hidden">
+                <ResizablePanel defaultSize="30%" minSize="15%" maxSize="70%" className="min-w-0 overflow-hidden">
                   <AiSidecar
                     api={terminalApi}
                     editorApi={editorApi}

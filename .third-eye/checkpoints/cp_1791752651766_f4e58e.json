@@ -1,0 +1,12 @@
+{
+  "id": "cp_1791752651766_f4e58e",
+  "timestamp": 1791752651766,
+  "description": "Pre-mutation snapshot: write_file package.json",
+  "files": {
+    "/Users/adityasalgotra/Downloads/THIRD_EYE/Frontend/milkshake-site/package.json": {
+      "path": "/Users/adityasalgotra/Downloads/THIRD_EYE/Frontend/milkshake-site/package.json",
+      "hash": "new-file",
+      "content": ""
+    }
+  }
+}

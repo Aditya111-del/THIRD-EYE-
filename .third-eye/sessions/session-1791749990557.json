@@ -1,0 +1,42 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "stop the server"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "stop_server",
+            "args": {},
+            "id": "call_1753572"
+          },
+          "thoughtSignature": "EmAKXgFpFH0TyAt6tzO1fh8KoXGphxN6n1B0CHAaMwb4xQ7eGu8BT48Dy8sXunz4+qf7ALJaMMelVIBTFcRQIO4Irr6qZMp1jeEcUvVZBQIwCZPB/Te6xd1NzSrcniPICfE="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1753572",
+          "name": "stop_server",
+          "args": {}
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "stop_server",
+      "toolCallId": "call_1753572",
+      "content": {
+        "success": true,
+        "message": "Successfully stopped server processes: Process on port 5000 (PID 64805)",
+        "killed": [
+          "Process on port 5000 (PID 64805)"
+        ]
+      }
+    }
+  ],
+  "timestamp": 1791750033747
+}

@@ -30,7 +30,8 @@
     "exactOptionalPropertyTypes": true,
     "noUncheckedSideEffectImports": true,
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@third-eye/shared": ["../../packages/shared/src/index.ts"]
     }
   }
 }

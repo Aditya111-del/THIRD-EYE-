@@ -115,10 +115,10 @@ export function parseTerminalHistory(lines: string[]): {
           cwd: activeDir,
         });
       }
-      activeDir = (winPsMatch ? winPsMatch[1] : winCmdMatch?.[1] || "C:\\").trim();
+      activeDir = ((winPsMatch ? winPsMatch[1] : winCmdMatch?.[1]) || "C:\\").trim();
       isRemote = false;
 
-      const cmdText = (winPsMatch ? winPsMatch[2] : winCmdMatch?.[2] || "").trim();
+      const cmdText = ((winPsMatch ? winPsMatch[2] : winCmdMatch?.[2]) || "").trim();
       if (cmdText && !isInternalShellCmd(cmdText)) {
         currentCmd = cmdText;
         currentOutput = [];
@@ -531,8 +531,8 @@ The shell prompt is active and ready for your next command.`;
     if (/Push cannot contain secrets|GH013|Repository rule violations|unblock-secret|secret-scanning/i.test(allText)) {
       return `GitHub's **Push Protection** blocked your push because an API key was detected in your commit history:
 
-- **Detected Location:** \`Frontend/guide-build-main/src/hooks/useSalesforceWorkspace.ts\` (line 153)
-- **Status:** The hardcoded secret has now been removed from the file.
+- **Detected Location:** Commit history scan
+- **Status:** The hardcoded secret has now been removed.
 
 **How to solve:**
 Amend your commit to replace the old commit in git history, then force push:
@@ -664,7 +664,7 @@ Feel free to ask about committing, branching, or resolving merge conflicts anyti
   if (p.includes("build") || p.includes("dev") || p.includes("npm") || p.includes("start") || p.includes("test") || p.includes("package")) {
     return `Here is how the project workflow is structured for THIRD EYE:
 
-This is a multi-tier workspace consisting of an Electron desktop client, TanStack Start / Vite frontend, and background microservices (PTY on port 4001, AI on port 4002, Salesforce on port 4003).
+This is a multi-tier workspace consisting of an Electron desktop client, TanStack Start / Vite frontend, and background microservices (PTY on port 4001, AI on port 4002).
 
 - **Run all services concurrently in dev mode:**
 \`\`\`sh
@@ -735,19 +735,16 @@ Replace \`4001\` with whichever port is conflicting!`;
   }
 
   // -------------------------------------------------------------
-  // INTENT K: FLEET & ROBOTICS / SALESFORCE (Human + Tech Combination)
+  // INTENT K: FLEET & ROBOTICS CLUSTER ARCHITECTURE
   // -------------------------------------------------------------
-  if (p.includes("fleet") || p.includes("butler") || p.includes("greyorange") || p.includes("gor") || p.includes("salesforce") || p.includes("ticket") || p.includes("node")) {
-    return `Here is the architecture of your connected Fleet & Salesforce environment:
+  if (p.includes("fleet") || p.includes("butler") || p.includes("greyorange") || p.includes("gor") || p.includes("node")) {
+    return `Here is the architecture of your connected Fleet environment:
 
 - **GreyOrange Butler Robotics Cluster (GOR-FHR-PROD):**
   - **Primary Core:** \`172.28.76.144\` (butler-core-fhrprod) — coordinates robotics dispatch
   - **Database Cluster:** \`172.28.76.145\` (butler-db-cluster-01) — state and event persistence
   - **Worker Nodes:** \`172.28.76.146\` — background task execution
   - **Edge Gateway:** \`172.28.76.150\` — hardware telemetry ingestion
-- **Salesforce Service Cloud Integration:**
-  - Pulls live support cases, priority, customer site details, and matching IP addresses.
-  - Clicking any VM in the left explorer automatically launches an SSH session in a new terminal tab.
 
 You can connect to the primary Butler node anytime with:
 \`\`\`sh

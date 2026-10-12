@@ -19,13 +19,11 @@ import {
   FolderOpen,
 } from "lucide-react";
 import type { TerminalApi } from "@/hooks/useTerminalSession";
-import type { SalesforceWorkspaceApi } from "@/hooks/useSalesforceWorkspace";
 import { copyToClipboard } from "@/lib/clipboard";
-import { getActiveTerminalSelection } from "@/components/terminal/XtermView";
+import { getActiveTerminalSelection } from "@/components/terminal/terminalState";
 
 interface AntigravityTitleBarProps {
   terminalApi: TerminalApi;
-  sfApi: SalesforceWorkspaceApi;
   showLeftSidebar: boolean;
   onToggleLeftSidebar: () => void;
   showRightSidebar: boolean;
@@ -35,13 +33,14 @@ interface AntigravityTitleBarProps {
   onSplitTerminal: () => void;
   onOpenSettings: () => void;
   onOpenSearch: () => void;
+  onOpenFolder?: (() => void) | undefined;
+  activeFilePath?: string | undefined;
 }
 
 type MenuType = "file" | "edit" | "selection" | "view" | "terminal" | "help" | "more" | "avatar" | null;
 
 export function AntigravityTitleBar({
   terminalApi,
-  sfApi,
   showLeftSidebar,
   onToggleLeftSidebar,
   showRightSidebar,
@@ -51,7 +50,10 @@ export function AntigravityTitleBar({
   onSplitTerminal,
   onOpenSettings,
   onOpenSearch,
+  onOpenFolder,
+  activeFilePath,
 }: AntigravityTitleBarProps) {
+  const activeFileName = activeFilePath ? activeFilePath.split(/[/\\]/).pop() || "" : "";
   const [activeMenu, setActiveMenu] = useState<MenuType>(null);
   const [isMaximized, setIsMaximized] = useState(false);
   const menuBarRef = useRef<HTMLDivElement>(null);
@@ -62,12 +64,15 @@ export function AntigravityTitleBar({
       window.electronAPI.window.isMaximized().then((max) => setIsMaximized(Boolean(max)));
     }
 
+    let unsub: (() => void) | undefined;
     if (typeof window !== "undefined" && window.electronAPI?.window?.onMaximizedChanged) {
-      const unsub = window.electronAPI.window.onMaximizedChanged((max) => {
+      unsub = window.electronAPI.window.onMaximizedChanged((max) => {
         setIsMaximized(max);
       });
-      return () => unsub?.();
     }
+    return () => {
+      unsub?.();
+    };
   }, []);
 
   // Close menus on outside click
@@ -125,31 +130,34 @@ export function AntigravityTitleBar({
       className="flex h-[35px] shrink-0 items-center justify-between border-b border-[#262626] bg-[#161616] select-none text-[12px] font-sans text-[#CCCCCC] z-50 relative app-drag-region"
       onDoubleClick={handleToggleMaximize}
     >
-      {/* 1. LEFT: Antigravity Prism Logo + Desktop Menu Bar */}
-      <div className="flex items-center h-full pl-2 gap-0.5 app-no-drag">
-        {/* Antigravity Multi-Colored Prism / Delta Logo */}
+      {/* 1. LEFT: THIRD EYE Logo + Desktop Menu Bar */}
+      <div className="flex items-center h-full pl-2 gap-0.5 app-no-drag max-w-[calc(50%-230px)] overflow-hidden">
+        {/* Antigravity Multi-Colored Gradient Logo Badge matching Screenshot 2 */}
         <div
-          className="flex items-center justify-center h-6 w-6 mr-1.5 cursor-pointer rounded hover:bg-[#252525] transition-colors"
-          title="THIRD EYE — Antigravity IDE"
+          className="flex items-center justify-center h-5 w-5 mr-1.5 cursor-pointer rounded-[4px] bg-gradient-to-tr from-[#FF5E62] via-[#FF9966] to-[#7B2CBF] shadow-sm shrink-0"
+          title="THIRD EYE"
           onClick={() => setActiveMenu(activeMenu === "more" ? null : "more")}
         >
-          <svg viewBox="0 0 24 24" className="h-4.5 w-4.5" fill="none">
-            <defs>
-              <linearGradient id="agyGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-                <stop offset="0%" stopColor="#A855F7" />
-                <stop offset="50%" stopColor="#3B82F6" />
-                <stop offset="100%" stopColor="#FF6B00" />
-              </linearGradient>
-            </defs>
+          <svg viewBox="0 0 16 16" className="h-3 w-3 text-white" fill="none">
             <path
-              d="M12 2.5L21.5 19H2.5L12 2.5Z"
-              stroke="url(#agyGrad)"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
+              d="M3 2.5L13 2.5L8 13.5L3 2.5Z"
+              fill="white"
+              fillOpacity="0.9"
             />
-            <circle cx="12" cy="14" r="2.2" fill="#FF6B00" />
           </svg>
+        </div>
+
+        {/* Product Title + Dynamic Path */}
+        <div className="flex items-center gap-1.5 text-[12px] font-sans mr-2 select-none">
+          <span className="font-semibold text-white tracking-tight">THIRD EYE</span>
+          {activeFileName && activeFilePath && (
+            <>
+              <span className="text-[#65656E]">/</span>
+              <span className="text-[#E0E0E8] font-mono text-[11px] font-medium truncate max-w-[200px]">
+                {activeFilePath.replace(/\\/g, "/")}
+              </span>
+            </>
+          )}
         </div>
 
         {/* Menu Item: File */}
@@ -165,6 +173,26 @@ export function AntigravityTitleBar({
           </button>
           {activeMenu === "file" && (
             <div className="absolute left-0 top-full mt-0.5 w-56 rounded-md bg-[#1C1C1C] border border-[#303030] shadow-2xl py-1 text-xs text-[#CCCCCC] z-50 animate-in fade-in-50 zoom-in-95">
+              <button
+                onClick={() =>
+                  exec(() => {
+                    if (onOpenFolder) {
+                      onOpenFolder();
+                    } else if (window.electronAPI?.dialog?.openFolder) {
+                      window.electronAPI.dialog.openFolder().then((res) => {
+                        if (res?.success && res.folderPath) {
+                          terminalApi.cdToDirectory(res.folderPath);
+                        }
+                      });
+                    }
+                  })
+                }
+                className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#282828] hover:text-white text-left font-medium text-white"
+              >
+                <span>Open Folder / Project…</span>
+                <span className="font-mono text-[10px] text-[#777777]">Ctrl+O</span>
+              </button>
+              <div className="h-px bg-[#2C2C2C] my-1" />
               <button
                 onClick={() => exec(() => terminalApi.createTerminal("cmd"))}
                 className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#282828] hover:text-white text-left"
@@ -248,7 +276,7 @@ export function AntigravityTitleBar({
               <button
                 onClick={() => exec(() => {
                   if (terminalApi.active) {
-                    terminalApi.execute(terminalApi.active.id, "cls");
+                    terminalApi.execute("cls");
                   }
                 })}
                 className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#282828] hover:text-white text-left"
@@ -398,7 +426,7 @@ export function AntigravityTitleBar({
               <button
                 onClick={() => exec(() => {
                   if (terminalApi.active) {
-                    terminalApi.execute(terminalApi.active.id, "cls");
+                    terminalApi.execute("cls");
                   }
                 })}
                 className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#282828] hover:text-white text-left"
@@ -443,12 +471,12 @@ export function AntigravityTitleBar({
                 onClick={() => exec(onOpenSettings)}
                 className="w-full flex items-center justify-between px-3 py-1.5 hover:bg-[#282828] hover:text-white text-left"
               >
-                <span>Salesforce Config & Setup</span>
+                <span>Settings</span>
               </button>
               <div className="h-px bg-[#2C2C2C] my-1" />
               <div className="px-3 py-2 text-[11px] text-[#777777]">
                 <div className="font-semibold text-[#E0E0E0]">THIRD EYE v1.0.0</div>
-                <div>Powered by Antigravity IDE Engine</div>
+                <div>Third Eye Neural IDE Engine</div>
               </div>
             </div>
           )}
@@ -469,13 +497,6 @@ export function AntigravityTitleBar({
           {activeMenu === "more" && (
             <div className="absolute left-0 top-full mt-0.5 w-52 rounded-md bg-[#1C1C1C] border border-[#303030] shadow-2xl py-1 text-xs text-[#CCCCCC] z-50 animate-in fade-in-50 zoom-in-95">
               <button
-                onClick={() => exec(() => sfApi.syncSalesforce())}
-                className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[#282828] hover:text-white text-left"
-              >
-                <RefreshCw className="h-3.5 w-3.5 text-[#FF6B00]" />
-                <span>Sync Salesforce</span>
-              </button>
-              <button
                 onClick={() => exec(onOpenSettings)}
                 className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-[#282828] hover:text-white text-left"
               >
@@ -487,8 +508,22 @@ export function AntigravityTitleBar({
         </div>
       </div>
 
-      {/* 2. CENTER: Clean Draggable Title Bar Region */}
-      <div className="flex-1 flex items-center justify-center px-4 overflow-hidden app-drag-region h-full" />
+      {/* 2. CENTER: Clean Professional Title Bar Search Pill matching Reference Image */}
+      <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-full max-w-[440px] px-2 z-20 app-no-drag pointer-events-auto">
+        <button
+          onClick={onOpenSearch}
+          className="w-full h-[27px] flex items-center justify-between px-3 bg-[#1B1C22] hover:bg-[#23242E] border border-[#2F313D] hover:border-[#3E4050] rounded-[6px] text-[12px] text-[#8C8E9F] hover:text-[#D4D6E4] transition-all cursor-pointer shadow-[0_1px_3px_rgba(0,0,0,0.3)] group select-none"
+          title="Search files, symbols, and commands (⌘K / Ctrl+K)"
+        >
+          <div className="flex items-center gap-2.5 truncate">
+            <Search className="h-3.5 w-3.5 text-[#7E8092] group-hover:text-[#A0A2B6] shrink-0 transition-colors" />
+            <span className="truncate tracking-wide font-normal">Search entire project</span>
+          </div>
+          <kbd className="h-[18px] px-1.5 flex items-center justify-center text-[10px] font-mono text-[#828496] group-hover:text-[#B4B6C8] bg-[#242530] border border-[#353746] rounded-[4px] shrink-0 ml-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.03)] transition-colors">
+            ⌘K
+          </kbd>
+        </button>
+      </div>
 
       {/* 3. RIGHT: Layout Toggles + Utilities + Avatar + Frameless Window Controls */}
       <div className="flex items-center h-full gap-1.5 app-no-drag">
@@ -568,14 +603,7 @@ export function AntigravityTitleBar({
           <Search className="h-3.5 w-3.5" />
         </button>
 
-        {/* Utility Icon 2: Sync / Globe (Salesforce Data Sync) */}
-        <button
-          onClick={() => sfApi.syncSalesforce()}
-          className="flex items-center justify-center h-6 w-6 rounded text-[#8E8E8E] hover:text-white hover:bg-[#252525] transition-colors cursor-pointer"
-          title="Sync Salesforce Workspace"
-        >
-          <RefreshCw className={`h-3.5 w-3.5 ${sfApi.isSyncing ? "animate-spin text-[#FF6B00]" : ""}`} />
-        </button>
+
 
         {/* Utility Icon 3: Settings Gear */}
         <button
@@ -586,17 +614,16 @@ export function AntigravityTitleBar({
           <Settings className="h-3.5 w-3.5" />
         </button>
 
-        {/* User Avatar with Chevron Dropdown (AS v) */}
-        <div className="relative ml-0.5">
+        {/* User Avatar with Gradient Ring matching Screenshot 2 */}
+        <div className="relative ml-1">
           <button
             onClick={() => setActiveMenu(activeMenu === "avatar" ? null : "avatar")}
-            className="flex items-center gap-1 pl-1 pr-1.5 py-0.5 rounded hover:bg-[#252525] transition-colors cursor-pointer"
+            className="flex items-center p-0.5 rounded-full bg-gradient-to-tr from-[#FF5E62] via-[#FF9966] to-[#7B2CBF] hover:opacity-90 transition-opacity cursor-pointer shadow-sm"
             title="Engineer Profile: aditya.s.ctr"
           >
-            <div className="h-5 w-5 rounded-full bg-[#242424] border border-[#3A3A3A] text-[#FF6B00] font-bold text-[9.5px] font-mono flex items-center justify-center">
-              AS
+            <div className="h-5 w-5 rounded-full bg-[#18181C] flex items-center justify-center text-white text-[9px] font-bold font-sans">
+              <User className="h-3 w-3 text-white" />
             </div>
-            <ChevronDown className="h-2.5 w-2.5 text-[#888888]" />
           </button>
 
           {activeMenu === "avatar" && (
@@ -607,19 +634,13 @@ export function AntigravityTitleBar({
                 </div>
                 <div className="min-w-0">
                   <div className="text-[12.5px] font-semibold text-white truncate">aditya.s.ctr</div>
-                  <div className="text-[10.5px] text-[#808080] truncate">Cloud DevOps & Salesforce</div>
+                  <div className="text-[10.5px] text-[#808080] truncate">Cloud DevOps & Systems</div>
                 </div>
               </div>
               <div className="py-1.5 space-y-1">
                 <div className="flex items-center justify-between px-2 py-1 text-[11px] text-[#888888]">
-                  <span>Salesforce Status:</span>
-                  <span className={`font-mono text-[10px] ${sfApi.status.connected ? "text-emerald-400" : "text-[#888888]"}`}>
-                    {sfApi.status.connected ? "Connected" : "Standby"}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between px-2 py-1 text-[11px] text-[#888888]">
                   <span>AI Diagnostics:</span>
-                  <span className="font-mono text-[10px] text-amber-400">Gemini 3.8</span>
+                  <span className="font-mono text-[10px] text-amber-400">Gemini 2.0</span>
                 </div>
               </div>
               <div className="h-px bg-[#2C2C2C] my-1" />

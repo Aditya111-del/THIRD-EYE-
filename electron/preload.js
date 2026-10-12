@@ -70,6 +70,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.removeListener('terminal.exit', handler);
       };
     },
+
+    /**
+     * Change working directory of terminal session(s)
+     * @param {string} [id] - Optional session ID
+     * @param {string} [dir] - Target directory path
+     * @returns {Promise<{ success: boolean }>}
+     */
+    cd: (id, dir) => ipcRenderer.invoke('terminal.cd', typeof id === 'object' ? id : { id, dir }),
+
+    /**
+     * Retrieve live terminal output buffer
+     * @param {string} id - Terminal ID
+     * @returns {Promise<string>}
+     */
+    getBuffer: (id) => ipcRenderer.invoke('terminal.getBuffer', { id }),
   },
 
   ai: {
@@ -121,12 +136,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
 
-  salesforce: {
-    testConnection: (params) => ipcRenderer.invoke('salesforce.test', params),
-    fetchTickets: (params) => ipcRenderer.invoke('salesforce.fetchTickets', params),
-    saveConfig: (params) => ipcRenderer.invoke('salesforce.saveConfig', params),
-    getConfig: () => ipcRenderer.invoke('salesforce.getConfig'),
-  },
 
   window: {
     /**
@@ -222,6 +231,82 @@ contextBridge.exposeInMainWorld('electronAPI', {
     writeText: (text) => ipcRenderer.invoke('clipboard.writeText', text),
   },
 
+  fs: {
+    getWorkspaceRoot: () => ipcRenderer.invoke('fs.getWorkspaceRoot'),
+    readDirectory: (dirPath) => ipcRenderer.invoke('fs.readDirectory', dirPath),
+    scanTree: (dirPath, options = {}) => ipcRenderer.invoke('fs.scanTree', dirPath, options),
+    readFile: (filePath) => ipcRenderer.invoke('fs.readFile', filePath),
+    writeFile: (filePath, content) => ipcRenderer.invoke('fs.writeFile', { filePath, content }),
+    createFile: (filePath) => ipcRenderer.invoke('fs.createFile', filePath),
+    createDirectory: (dirPath) => ipcRenderer.invoke('fs.createDirectory', dirPath),
+    deletePath: (targetPath) => ipcRenderer.invoke('fs.deletePath', targetPath),
+    renamePath: (oldPath, newPath) => ipcRenderer.invoke('fs.renamePath', { oldPath, newPath }),
+    search: (query, options = {}) => ipcRenderer.invoke('fs.search', { query, ...options }),
+    onWatchEvent: (callback) => {
+      const handler = (_event, data) => callback(data);
+      ipcRenderer.on('fs.watchEvent', handler);
+      return () => {
+        ipcRenderer.removeListener('fs.watchEvent', handler);
+      };
+    },
+  },
+
+  git: {
+    status: () => ipcRenderer.invoke('git.status'),
+    init: () => ipcRenderer.invoke('git.init'),
+    stage: (filePath) => ipcRenderer.invoke('git.stage', filePath),
+    unstage: (filePath) => ipcRenderer.invoke('git.unstage', filePath),
+    discard: (options) => ipcRenderer.invoke('git.discard', options),
+    commit: (options) => ipcRenderer.invoke('git.commit', typeof options === 'string' ? { message: options } : options),
+    push: (options) => ipcRenderer.invoke('git.push', options),
+    pull: (options) => ipcRenderer.invoke('git.pull', options),
+    fetch: (options) => ipcRenderer.invoke('git.fetch', options),
+    setRemote: (options) => ipcRenderer.invoke('git.setRemote', options),
+    clone: (options) => ipcRenderer.invoke('git.clone', options),
+    onStatusChanged: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('git.statusChanged', handler);
+      return () => ipcRenderer.removeListener('git.statusChanged', handler);
+    },
+  },
+
+  github: {
+    getUser: (options) => ipcRenderer.invoke('github.getUser', options),
+    fork: (options) => ipcRenderer.invoke('github.fork', options),
+    createRepo: (options) => ipcRenderer.invoke('github.createRepo', options),
+  },
+
+  dialog: {
+    /**
+     * Open native OS folder picker so user can select any folder from device
+     * @returns {Promise<{ success: boolean, canceled?: boolean, folderPath?: string, folderName?: string }>}
+     */
+    openFolder: () => ipcRenderer.invoke('dialog.openFolder'),
+  },
+
+  workspace: {
+    /**
+     * Listen for project/workspace root change events
+     * @param {(data: { root: string, name: string }) => void} callback
+     * @returns {() => void} Unsubscribe function
+     */
+    onRootChanged: (callback) => {
+      const handler = (_event, data) => callback(data);
+      ipcRenderer.on('workspace.rootChanged', handler);
+      return () => ipcRenderer.removeListener('workspace.rootChanged', handler);
+    },
+
+    /**
+     * Programmatically switch workspace to an arbitrary folder path
+     * @param {string} targetPath
+     * @returns {Promise<{ success: boolean, folderPath?: string, folderName?: string }>}
+     */
+    openPath: (targetPath) => ipcRenderer.invoke('workspace.openPath', targetPath),
+    openFolder: () => ipcRenderer.invoke('dialog.openFolder'),
+    resetToDefault: () => ipcRenderer.invoke('workspace.resetToDefault'),
+    close: () => ipcRenderer.invoke('workspace.close'),
+  },
+
   system: {
     /**
      * Get platform default shell
@@ -259,6 +344,155 @@ contextBridge.exposeInMainWorld('electronAPI', {
     platform: process.platform,
 
     /** Electron framework version */
+    versions: {
+      electron: process.versions.electron,
+      node: process.versions.node,
+      chrome: process.versions.chrome,
+    },
+  },
+});
+
+/**
+ * Expose Industry-Grade Typed Contract window.thirdEye (Phase 1)
+ */
+contextBridge.exposeInMainWorld('thirdEye', {
+  files: {
+    readFile: (filePath) => ipcRenderer.invoke('files.read', typeof filePath === 'object' ? filePath.path : filePath),
+    writeFile: (filePath, content) => ipcRenderer.invoke('files.write', typeof filePath === 'object' ? filePath : { path: filePath, content }),
+    createFile: (filePath) => ipcRenderer.invoke('files.create', typeof filePath === 'object' ? filePath : { path: filePath }),
+    createDirectory: (dirPath) => ipcRenderer.invoke('files.create', typeof dirPath === 'object' ? dirPath : { path: dirPath, isDirectory: true }),
+    deletePath: (targetPath) => ipcRenderer.invoke('files.delete', typeof targetPath === 'object' ? targetPath : { path: targetPath }),
+    renamePath: (oldPath, newPath) => ipcRenderer.invoke('files.rename', typeof oldPath === 'object' ? oldPath : { oldPath, newPath }),
+    readDirectory: (dirPath) => ipcRenderer.invoke('files.readDirectory', dirPath),
+    scanTree: (dirPath, options = {}) => ipcRenderer.invoke('files.scanTree', dirPath, options),
+    search: (query, options = {}) => ipcRenderer.invoke('files.search', { query, ...options }),
+    getWorkspaceRoot: () => ipcRenderer.invoke('files.getWorkspaceRoot'),
+    onWatchEvent: (callback) => {
+      const handler = (_event, data) => callback(data);
+      ipcRenderer.on('files.watchEvent', handler);
+      return () => ipcRenderer.removeListener('files.watchEvent', handler);
+    },
+  },
+
+  terminal: {
+    spawn: (config = {}) => ipcRenderer.invoke('terminal.spawn', config),
+    write: (id, data) => {
+      ipcRenderer.send('terminal.write', { id, data });
+      ipcRenderer.send('terminal.keystroke', { id, data });
+    },
+    resize: (id, cols, rows) => ipcRenderer.send('terminal.resize', { id, cols, rows }),
+    kill: (id) => ipcRenderer.invoke('terminal.kill', { id }),
+    list: () => ipcRenderer.invoke('terminal.list'),
+    cd: (id, dir) => ipcRenderer.invoke('terminal.cd', typeof id === 'object' ? id : { id, dir }),
+    getBuffer: (id) => ipcRenderer.invoke('terminal.getBuffer', { id }),
+    onData: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('terminal.incomingData', handler);
+      return () => ipcRenderer.removeListener('terminal.incomingData', handler);
+    },
+    onExit: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('terminal.exit', handler);
+      return () => ipcRenderer.removeListener('terminal.exit', handler);
+    },
+  },
+
+  agent: {
+    chat: (params) => ipcRenderer.invoke('agent.chat', params),
+    cancel: (sessionId) => ipcRenderer.invoke('agent.cancel', { sessionId }),
+    sendPermissionDecision: (decision) => ipcRenderer.invoke('agent.permissionDecision', decision),
+    revertCheckpoint: (checkpointId) => ipcRenderer.invoke('agent.revertCheckpoint', { checkpointId }),
+    onStatus: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('agent.statusStream', handler);
+      return () => ipcRenderer.removeListener('agent.statusStream', handler);
+    },
+    onDelta: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('agent.delta', handler);
+      return () => ipcRenderer.removeListener('agent.delta', handler);
+    },
+    onPermissionRequest: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('agent.permissionRequest', handler);
+      return () => ipcRenderer.removeListener('agent.permissionRequest', handler);
+    },
+  },
+
+  git: {
+    status: () => ipcRenderer.invoke('git.status'),
+    init: () => ipcRenderer.invoke('git.init'),
+    stage: (filePath) => ipcRenderer.invoke('git.stage', filePath),
+    unstage: (filePath) => ipcRenderer.invoke('git.unstage', filePath),
+    discard: (options) => ipcRenderer.invoke('git.discard', options),
+    commit: (options) => ipcRenderer.invoke('git.commit', typeof options === 'string' ? { message: options } : options),
+    push: (options) => ipcRenderer.invoke('git.push', options),
+    pull: (options) => ipcRenderer.invoke('git.pull', options),
+    fetch: (options) => ipcRenderer.invoke('git.fetch', options),
+    setRemote: (options) => ipcRenderer.invoke('git.setRemote', options),
+    clone: (options) => ipcRenderer.invoke('git.clone', options),
+    onStatusChanged: (callback) => {
+      const handler = () => callback();
+      ipcRenderer.on('git.statusChanged', handler);
+      return () => ipcRenderer.removeListener('git.statusChanged', handler);
+    },
+  },
+
+  github: {
+    getUser: (options) => ipcRenderer.invoke('github.getUser', options),
+    fork: (options) => ipcRenderer.invoke('github.fork', options),
+    createRepo: (options) => ipcRenderer.invoke('github.createRepo', options),
+  },
+
+  window: {
+    zoomIn: () => ipcRenderer.invoke('window.zoomIn'),
+    zoomOut: () => ipcRenderer.invoke('window.zoomOut'),
+    resetZoom: () => ipcRenderer.invoke('window.resetZoom'),
+    getZoom: () => ipcRenderer.invoke('window.getZoom'),
+    setZoom: (factor) => ipcRenderer.invoke('window.setZoom', factor),
+    minimize: () => ipcRenderer.invoke('window.minimize'),
+    close: () => ipcRenderer.invoke('window.close'),
+    toggleMaximize: () => ipcRenderer.invoke('window.toggleMaximize'),
+    isMaximized: () => ipcRenderer.invoke('window.isMaximized'),
+    onMaximizedChanged: (callback) => {
+      const handler = (_event, isMax) => callback(isMax);
+      ipcRenderer.on('window.maximizedChanged', handler);
+      return () => ipcRenderer.removeListener('window.maximizedChanged', handler);
+    },
+    onZoomChanged: (callback) => {
+      const handler = (_event, zoom) => callback(zoom);
+      ipcRenderer.on('window.zoomChanged', handler);
+      return () => ipcRenderer.removeListener('window.zoomChanged', handler);
+    },
+  },
+
+  dialog: {
+    openFolder: () => ipcRenderer.invoke('dialog.openFolder'),
+  },
+
+  workspace: {
+    openPath: (targetPath) => ipcRenderer.invoke('workspace.openPath', targetPath),
+    openFolder: () => ipcRenderer.invoke('dialog.openFolder'),
+    resetToDefault: () => ipcRenderer.invoke('workspace.resetToDefault'),
+    onRootChanged: (callback) => {
+      const handler = (_event, data) => callback(data);
+      ipcRenderer.on('workspace.rootChanged', handler);
+      return () => ipcRenderer.removeListener('workspace.rootChanged', handler);
+    },
+  },
+
+  clipboard: {
+    readText: () => ipcRenderer.invoke('clipboard.readText'),
+    writeText: (text) => ipcRenderer.invoke('clipboard.writeText', text),
+  },
+
+  system: {
+    getDefaultShell: () => ipcRenderer.invoke('system.getDefaultShell'),
+    getCwd: () => ipcRenderer.invoke('system.getCwd'),
+    inspectDirectory: (cwd) => ipcRenderer.invoke('system.inspectDirectory', cwd),
+    openExternalTerminal: (cwd) => ipcRenderer.invoke('system.openExternalTerminal', cwd),
+    relaunchApp: () => ipcRenderer.invoke('system.relaunchApp'),
+    platform: process.platform,
     versions: {
       electron: process.versions.electron,
       node: process.versions.node,

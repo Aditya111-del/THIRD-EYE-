@@ -12,10 +12,21 @@ try {
   );
 }
 
+function resolveExistingPath(p) {
+  if (!p || typeof p !== 'string') return '';
+  if (fs.existsSync(p)) return p;
+  if (fs.existsSync(p.trim())) return p.trim();
+  if (fs.existsSync(p + ' ')) return p + ' ';
+  if (fs.existsSync(p.trimEnd())) return p.trimEnd();
+  return p;
+}
+
 class PTYManager {
   constructor() {
     /** @type {Map<string, { pty: any, id: string, shell: string, cwd: string, createdAt: number }>} */
     this.sessions = new Map();
+    /** @type {Map<string, string>} Live terminal output buffer cache */
+    this.buffers = new Map();
     this.defaultOnData = null;
     this.defaultOnExit = null;
   }
@@ -38,8 +49,11 @@ class PTYManager {
    * @returns {string}
    */
   resolveCwd(requestedCwd) {
-    if (requestedCwd && fs.existsSync(requestedCwd)) {
-      return requestedCwd;
+    if (requestedCwd) {
+      const resolved = resolveExistingPath(requestedCwd);
+      if (fs.existsSync(resolved)) {
+        return resolved;
+      }
     }
     return os.homedir() || process.cwd();
   }
@@ -63,8 +77,11 @@ class PTYManager {
 
     const id = options.id || `term-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
     if (this.sessions.has(id)) {
-      console.log(`[PTYManager] Session ${id} already exists, cleanly terminating prior instance.`);
-      this.kill(id);
+      const existing = this.sessions.get(id);
+      if (existing) {
+        console.log(`[PTYManager] Session ${id} already active in ${existing.cwd}, reusing existing instance.`);
+        return { id, shell: existing.shell, cwd: existing.cwd, cols: existing.lastCols || 120, rows: existing.lastRows || 24 };
+      }
     }
 
     let shell = options.shell;
@@ -82,18 +99,41 @@ class PTYManager {
         shellArgs = ['/Q'];
       }
     } else {
-      shell = shell || this.getDefaultShell();
-      shellArgs = ['-i'];
+      if (!shell || shell.endsWith('.exe') || !fs.existsSync(shell)) {
+        shell = this.getDefaultShell();
+      }
+      if (shell.endsWith('zsh')) {
+        shellArgs = ['-o', 'NO_PROMPT_SP'];
+      } else {
+        shellArgs = [];
+      }
     }
     const cwd = this.resolveCwd(options.cwd);
     const cols = options.cols || 120;
     const rows = options.rows || 24;
 
+    const localBin = path.join(cwd, 'node_modules', '.bin');
+    const localNodeModules = path.join(cwd, 'node_modules');
+    const delimiter = path.delimiter;
+
+    const initialPath = (options.env && options.env.PATH) || process.env.PATH || '';
+    const resolvedPath = initialPath.startsWith(localBin)
+      ? initialPath
+      : `${localBin}${delimiter}${initialPath}`;
+
+    const initialNodePath = (options.env && options.env.NODE_PATH) || process.env.NODE_PATH || '';
+    const resolvedNodePath = initialNodePath.startsWith(localNodeModules)
+      ? initialNodePath
+      : `${localNodeModules}${delimiter}${initialNodePath}`;
+
     const env = {
       ...process.env,
       ...options.env,
+      PATH: resolvedPath,
+      NODE_PATH: resolvedNodePath,
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
+      PROMPT_EOL_MARK: '',
     };
 
     // Prepend Git's usr/bin if available so GNU coreutils (ls, grep, cat, which) work in cmd.exe
@@ -122,27 +162,22 @@ class PTYManager {
           useConpty: true, // Native Windows PseudoConsole API
         });
 
-        // Initialize shell silently and clear screen so prompt starts cleanly at Line 1, Col 1
-        setTimeout(() => {
-          try {
-            if (options.shellType === 'powershell' || /powershell|pwsh/i.test(shell)) {
-              ptyProcess.write('Clear-Host\r');
-            } else {
-              ptyProcess.write('doskey ls=dir /b $* >nul 2>&1 & doskey clear=cls >nul 2>&1 & doskey pwd=cd >nul 2>&1 & doskey which=where $* >nul 2>&1 & cls\r');
-            }
-          } catch {}
-        }, 80);
-
         const spawnTime = Date.now();
         let fallbackTriggered = false;
 
         ptyProcess.onData((data) => {
+          const prev = this.buffers.get(id) || '';
+          this.buffers.set(id, (prev + data).slice(-60000));
           if (typeof onData === 'function') {
             onData(id, data);
           }
         });
 
         ptyProcess.onExit(({ exitCode, signal }) => {
+          const current = this.sessions.get(id);
+          if (current && current.pty !== ptyProcess) {
+            return;
+          }
           this.sessions.delete(id);
           // If node-pty died prematurely on startup, seamlessly auto-recover via child_process!
           if (!fallbackTriggered && (Date.now() - spawnTime < 1000) && (exitCode === -1073741510 || exitCode !== 0)) {
@@ -187,15 +222,23 @@ class PTYManager {
       const { spawn: cpSpawn } = require('child_process');
       const isWin = process.platform === 'win32';
 
-      const safeArgs = Array.isArray(shellArgs) ? shellArgs : (isWin ? [] : ['-i']);
+      let targetShell = shell;
+      if (!isWin && (!targetShell || targetShell.endsWith('.exe') || !fs.existsSync(targetShell))) {
+        targetShell = this.getDefaultShell();
+      }
+      const safeArgs = Array.isArray(shellArgs) && shellArgs.length > 0 ? shellArgs : (isWin ? [] : (targetShell.endsWith('zsh') ? ['-o', 'NO_PROMPT_SP', '-l'] : ['-l']));
       const safeCwd = typeof cwd === 'string' && cwd.length > 0 ? cwd : this.resolveCwd();
 
       const child = cpSpawn(
-        shell,
+        targetShell,
         safeArgs,
         {
           cwd: safeCwd,
-          env: env || process.env,
+          env: {
+            ...process.env,
+            ...env,
+            PROMPT_EOL_MARK: '',
+          },
           windowsHide: true,
           stdio: ['pipe', 'pipe', 'pipe'],
         }
@@ -212,13 +255,24 @@ class PTYManager {
       });
 
       child.stdout.on('data', (d) => {
-        if (typeof resolvedOnData === 'function') resolvedOnData(id, d.toString());
+        const text = d.toString();
+        const prev = this.buffers.get(id) || '';
+        this.buffers.set(id, (prev + text).slice(-60000));
+        if (typeof resolvedOnData === 'function') resolvedOnData(id, text);
       });
       child.stderr.on('data', (d) => {
-        if (typeof resolvedOnData === 'function') resolvedOnData(id, d.toString());
+        const text = d.toString();
+        const prev = this.buffers.get(id) || '';
+        this.buffers.set(id, (prev + text).slice(-60000));
+        if (typeof resolvedOnData === 'function') resolvedOnData(id, text);
       });
       child.on('exit', (exitCode, signal) => {
+        const current = this.sessions.get(id);
+        if (current && current.pty !== wrapper) {
+          return;
+        }
         this.sessions.delete(id);
+        this.buffers.delete(id);
         if (typeof resolvedOnExit === 'function') resolvedOnExit(id, { exitCode: exitCode || 0, signal });
       });
 
@@ -325,6 +379,7 @@ class PTYManager {
    * @param {string} id
    */
   kill(id) {
+    this.buffers.delete(id);
     const session = this.sessions.get(id);
     if (!session) {
       return false;
@@ -341,9 +396,19 @@ class PTYManager {
   }
 
   /**
+   * Retrieve cached terminal output buffer for a session
+   * @param {string} id
+   * @returns {string}
+   */
+  getBuffer(id) {
+    return this.buffers.get(id) || '';
+  }
+
+  /**
    * Clean up all active sessions (e.g., when Electron quits)
    */
   killAll() {
+    this.buffers.clear();
     for (const [id, session] of this.sessions.entries()) {
       try {
         session.pty.kill();
@@ -364,6 +429,50 @@ class PTYManager {
       cwd: s.cwd,
       createdAt: s.createdAt,
     }));
+  }
+
+  /**
+   * Auto-direct a specific session to a new directory
+   * @param {string} id
+   * @param {string} targetDir
+   */
+  cdSession(id, targetDir) {
+    const session = this.sessions.get(id);
+    if (!session || !targetDir) return false;
+    const resolved = resolveExistingPath(targetDir);
+    if (!fs.existsSync(resolved)) return false;
+    session.cwd = resolved;
+    try {
+      const localBin = path.join(resolved, 'node_modules', '.bin');
+      const localNodeModules = path.join(resolved, 'node_modules');
+      if (process.platform === 'win32') {
+        if (/powershell|pwsh/i.test(session.shell)) {
+          session.pty.write(`Set-Location -LiteralPath "${resolved}"; $env:PATH = "${localBin};" + $env:PATH; $env:NODE_PATH = "${localNodeModules};" + $env:NODE_PATH\r`);
+        } else {
+          session.pty.write(`cd /d "${resolved}" & set "PATH=${localBin};%PATH%" & set "NODE_PATH=${localNodeModules};%NODE_PATH%"\r`);
+        }
+      } else {
+        session.pty.write(`cd "${resolved}" && export PATH="${localBin}:$PATH" && export NODE_PATH="${localNodeModules}:$NODE_PATH"\n`);
+      }
+      console.log(`[PTYManager] Directed session ${id} to ${resolved} with scoped node_modules in PATH`);
+      return true;
+    } catch (err) {
+      console.warn(`[PTYManager] Failed to cd session ${id}:`, err);
+      return false;
+    }
+  }
+
+  /**
+   * Auto-direct all active sessions into a new directory / project
+   * @param {string} targetDir
+   */
+  cdAllSessions(targetDir) {
+    if (!targetDir) return;
+    const resolved = resolveExistingPath(targetDir);
+    if (!fs.existsSync(resolved)) return;
+    for (const [id] of this.sessions.entries()) {
+      this.cdSession(id, resolved);
+    }
   }
 }
 

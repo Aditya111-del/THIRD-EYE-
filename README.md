@@ -1,101 +1,97 @@
-# THIRD EYE — AI-Native Terminal Workspace
+# THIRD EYE — Industry-Grade Agentic IDE
 
-**THIRD EYE** is a full-stack, AI-native desktop terminal workspace combining your pre-built **Lovable.dev** frontend (`Frontend/guide-build-main`) with a high-performance **Electron desktop runtime** and dedicated **Backend microservices** (`backend/pty-service` and `backend/ai-service`).
+**THIRD EYE** is a high-performance, enterprise-grade, AI-native Integrated Development Environment (IDE) architected with a decoupled 4-process topology. It unifies terminal multiplexing, Monaco editor workflows, file system virtualization, and an autonomous coding agent loop with side-effect transparency.
 
 ---
 
-## 📁 Project Architecture
+## 🏗️ 4-Process System Architecture
 
 ```text
-THIRD EYE/
-├── Frontend/guide-build-main/         # 🎨 FRONTEND (Pre-built Lovable.dev App)
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── terminal/
-│   │   │   │   └── TerminalStage.tsx  # Terminal UI with Ctrl+C interrupt, Ctrl+L clear & history
-│   │   │   ├── ai-assistant/
-│   │   │   │   └── AiSidecar.tsx      # THIRD EYE AI with root-cause diagnosis & 1-click fix
-│   │   │   ├── explorer/
-│   │   │   │   └── TerminalExplorer.tsx # Environment & session manager
-│   │   │   └── layout/
-│   │   │       └── MainLayout.tsx     # Resizable multi-pane layout & telemetry
-│   │   ├── hooks/
-│   │   │   ├── useTerminalSession.ts  # LIVE PTY integration & session state
-│   │   │   ├── useTerminalBackend.ts  # IPC connector hook
-│   │   │   └── useAiContext.ts        # Terminal buffer summarizer
-│   │   ├── types/
-│   │   │   ├── electron.d.ts          # Window.electronAPI type definitions
-│   │   │   └── terminal.ts            # Terminal and session interfaces
-│   │   └── routes/                    # TanStack Start / React Router pages
-│   ├── package.json
-│   └── vite.config.ts
+THIRD_EYE/
+├── package.json                         # Monorepo workspaces: packages/*, Frontend/*, backend/*
+├── packages/
+│   └── shared/                          # ★ CONTRACT LAYER (@third-eye/shared)
+│       ├── src/ipc.ts                   # Channel constants + typed Request/Response signatures
+│       ├── src/tools.ts                 # Tool schemas, parameters, and risk classifications
+│       ├── src/events.ts                # Streaming terminal, file watch, and agent events
+│       ├── src/agent.ts                 # Message turns, tool calls, checkpoints, context envelopes
+│       └── src/permissions.ts           # Permission requests, decisions, and auto-allow policy
 │
-├── backend/                           # ⚙️ BACKEND (Microservices)
-│   ├── pty-service/
-│   │   ├── package.json               # Dependencies: node-pty, express, ws, cors
-│   │   └── server.js                  # PTY server (port 4001) with WebSocket stdout/stdin streaming
+├── electron/                            # 🖥️ DESKTOP WRAPPER (Electron Main Process)
+│   ├── main.js                          # Window manager, chokidar file watcher, typed IPC router
+│   ├── preload.js                       # Secure ContextBridge exposing window.thirdEye & legacy adapters
+│   ├── ptyManager.js                    # Native PTY engine adapter
+│   └── aiEngine.js                      # Legacy adapter for backward compatibility
+│
+├── Frontend/guide-build-main/           # 🎨 RENDERER PROCESS (React 18 + TanStack + Monaco)
+│   ├── src/editor/                      # ★ In-Memory File Model Registry & Diff Preview
+│   │   ├── fileModels.ts                # In-memory models, versioning, external watch sync
+│   │   └── diffPreview/                 # Monaco Diff Editor for AI proposed hunk reviews
+│   ├── src/components/ai-assistant/     # AI Sidecar with Slash Commands & Checkpoint Restore
+│   ├── src/components/terminal/         # High-performance xterm.js terminal integration
+│   └── src/hooks/useEditorWorkspace.ts  # Workspace models & diff review actions
+│
+├── backend/
+│   ├── pty-service/                     # ⚙️ PTY MICROSERVICE (Port 4001)
+│   │   ├── src/sessionRegistry.ts       # Session coordinator (id → process, cwd, shell)
+│   │   ├── src/outputBus.ts             # 10,000-line circular ring buffer for late subscribers
+│   │   ├── src/shellIntegration.ts      # OSC 633 & OSC 7 sequence parser (cwd & exit code tracking)
+│   │   └── src/server.ts                # REST & WebSocket streaming server
 │   │
-│   └── ai-service/
-│       ├── package.json               # Dependencies: openai, langchain, express, cors
-│       └── agent.js                   # AI agent (port 4002) for log root-cause analysis & chat
+│   └── ai-service/                      # 🧠 AI AGENT MICROSERVICE (Port 4002)
+│       ├── src/loop.ts                  # ★ Autonomous 5-Step Agent Loop (max 25 iterations)
+│       ├── src/tools/                   # Tool registry (readFile, writeFile, editFile, searchCode, runTerminal)
+│       ├── src/context/                 # Context engineering (repoMap, chunker, retriever, budgetManager, compaction)
+│       ├── src/tools/checkpoints.ts     # Content-hash snapshot store for 1-click rollback
+│       └── src/tools/permissions.ts     # Policy engine enforcing user permission decisions
 │
-├── electron/                          # 🖥️ DESKTOP WRAPPER (Electron Runtime)
-│   ├── main.js                        # Multi-port loader (ports 3000 & 5173), window & IPC coordinator
-│   ├── preload.js                     # Secure ContextBridge exposing window.electronAPI
-│   ├── ptyManager.js                  # Native PTY engine embedded in Electron main process
-│   └── aiEngine.js                    # Rolling ring buffer, ANSI sanitizer & GPT-4o engine
-│
-├── .env                               # OPENAI_API_KEY, model selection & ports
-├── package.json                       # Unified root workspace config
-└── README.md
+├── scripts/
+│   └── smoke-test.js                    # Automated E2E smoke test verifying all processes
+└── docs/
+    ├── ARCHITECTURE.md                  # Comprehensive process map, data flows, and IPC contracts
+    ├── AGENT.md                         # Autonomous agent mental model, loop, and budget policy
+    └── MIGRATION_LOG.md                 # Complete record of all migration phases (0 through 7)
 ```
 
 ---
 
-## ⚡ Integration Details
+## ⚡ Non-Negotiable Hard Constraints Enforced
 
-1. **PTY Execution:**
-   - Spawns real system shells (PowerShell 7 / Windows PowerShell / `cmd.exe` on Windows; `zsh` / `bash` on macOS and Linux) via `node-pty`.
-   - Live stdout/stderr is stripped of ANSI escape codes, inspected for errors, and rendered smoothly in the terminal view.
-   - When run in browser preview outside Electron, falls back cleanly to mock mode.
-
-2. **THIRD EYE AI Engine:**
-   - Click **"Diagnose with AI"** or type `/explain` in the sidebar to send the rolling terminal buffer to GPT-4o.
-   - Receives root-cause diagnosis and a suggested command with a **"Run"** button to execute the fix with one click!
-   - Full interactive chat with context of recent terminal commands and logs.
-
-3. **Desktop & Microservices Flexibility:**
-   - **Embedded Mode (Default):** Electron runs the PTY manager and AI engine directly via Node.js IPC.
-   - **Microservices Mode:** `backend/pty-service` (port 4001) and `backend/ai-service` (port 4002) can run as standalone HTTP/WebSocket services.
+1. **Zero Ground-Up Rewrite**: Incremental migration preserving all existing features behind typed contracts.
+2. **Process Architecture**: Strict separation of Electron Main | Renderer | pty-service | ai-service.
+3. **Typed Contracts Everywhere**: Inter-process communication strictly mediated by `@third-eye/shared`. No untyped string IPC.
+4. **File Model Service**: Every agent write/edit routes through in-memory models and produces reviewable Monaco diff previews before persistent disk writes.
+5. **Tool Permissions**: Every terminal command requires explicit permission decision unless matching the auto-allow list (`git status`, `ls`, `pwd`, etc.).
+6. **Side-Effect Transparency & Checkpoints**: Content-hash snapshots recorded prior to each mutation, enabling single-click "Revert All AI Changes".
 
 ---
 
-## 🚀 How to Run THIRD EYE
+## 🚀 Running THIRD EYE
 
-### 1. Set your OpenAI API Key
-Edit [`.env`](file:///c:/Users/aditya.s.ctr/Desktop/THIRD%20EYE/.env):
+### 1. Environment Configuration
+Verify your [`.env`](file:///Users/adityasalgotra/Downloads/THIRD_EYE/.env) in the root directory:
 ```env
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.0-flash
+# Optional OpenAI fallback
 OPENAI_API_KEY=your_openai_api_key_here
-OPENAI_MODEL=gpt-4o
 ```
 
-### 2. Install Dependencies
+### 2. Build Workspaces
 ```bash
-# In the root directory:
-npm install
-npm run rebuild
+# Build the contract layer
+npm run build:shared
 
-# In the frontend directory:
-cd Frontend/guide-build-main
-npm install
-cd ../..
+# Run the end-to-end smoke test
+npm run smoke
 ```
 
-### 3. Launch Development Mode
+### 3. Launch Development Stack
 ```bash
 npm run dev
 ```
-* Starts the frontend on `http://localhost:3000` (or `5173`).
-* Launches Electron, connecting directly to the frontend with full PTY and AI integration.
-
-> **Note on temporary scaffolding:** You can safely delete the temporary `termx-workspace` directory if it is present (`rmdir /s /q termx-workspace` in PowerShell).
+Starts services concurrently:
+- **PTY Service**: `http://localhost:4001` (WebSocket: `ws://localhost:4001/pty/stream`)
+- **AI Agent Service**: `http://localhost:4002`
+- **Frontend Web App**: `http://localhost:3000`
+- **Electron Client**: Native desktop application with typed `window.thirdEye` bridge.

@@ -1,0 +1,217 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "analyse this and correct this file"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "readFile",
+            "args": {
+              "path": "Frontend/guide-build-main/src/styles.css"
+            },
+            "id": "call_1441664"
+          },
+          "thoughtSignature": "EmAKXgFpFH0TpqhQI3ermT6do0wHIyybH7SulFYbz7sD5nE5SQkqXM9TkV9XGNOGwxEbt1PplxMxYOU3mGGuF/LdUrPEguhKYi/YoKg/o5rSHnW4TI6mTgw/3+ETVehHjmc="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1441664",
+          "name": "readFile",
+          "args": {
+            "path": "Frontend/guide-build-main/src/styles.css"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "readFile",
+      "toolCallId": "call_1441664",
+      "content": {
+        "path": "Frontend/guide-build-main/src/styles.css",
+        "content": "1: @import url(\"https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap\");\n2: @import \"@xterm/xterm/css/xterm.css\";\n3: @import \"tailwindcss\" source(none);\n4: @import \"tw-animate-css\";\n5: \n6: @source \"../src\";\n7: \n8: @custom-variant dark (&:is(.dark *));\n9: \n10: @theme inline {\n11:   --font-sans:\n12:     -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"SF Pro Display\", \"Inter\", \"Segoe UI\", Roboto,\n13:     system-ui, sans-serif;\n14:   --font-mono: \"JetBrains Mono\", \"Cascadia Code\", Consolas, \"SF Mono\", monospace;\n15:   --radius-sm: calc(var(--radius) - 4px);\n16:   --radius-md: calc(var(--radius) - 2px);\n17:   --radius-lg: var(--radius);\n18:   --radius-xl: calc(var(--radius) + 4px);\n19:   --color-background: var(--background);\n20:   --color-foreground: var(--foreground);\n21:   --color-card: var(--card);\n22:   --color-card-foreground: var(--card-foreground);\n23:   --color-popover: var(--popover);\n24:   --color-popover-foreground: var(--popover-foreground);\n25:   --color-primary: var(--primary);\n26:   --color-primary-foreground: var(--primary-foreground);\n27:   --color-secondary: var(--secondary);\n28:   --color-secondary-foreground: var(--secondary-foreground);\n29:   --color-muted: var(--muted);\n30:   --color-muted-foreground: var(--muted-foreground);\n31:   --color-accent: var(--accent);\n32:   --color-accent-foreground: var(--accent-foreground);\n33:   --color-destructive: var(--destructive);\n34:   --color-destructive-foreground: var(--destructive-foreground);\n35:   --color-border: var(--border);\n36:   --color-input: var(--input);\n37:   --color-ring: transparent;\n38:   --color-stage: var(--stage);\n39:   --color-panel: var(--panel);\n40:   --color-online: var(--online);\n41:   --color-offline: var(--offline);\n42:   --color-warn: var(--warn);\n43:   --color-term-prompt: var(--term-prompt);\n44:   --color-term-path: var(--term-path);\n45:   --color-term-info: var(--term-info);\n46: }\n47: \n48: :root {\n49:   --radius: 0.25rem;\n50:   --background: #161616;\n51:   --panel: #222222;\n52:   --stage: #222222;\n53:   --foreground: #e0e0e0;\n54:   --card: #252525;\n55:   --card-foreground: #e0e0e0;\n56:   --popover: #222222;\n57:   --popover-foreground: #e0e0e0;\n58:   --primary: #ff6b00;\n59:   --primary-foreground: #ffffff;\n60:   --secondary: #252525;\n61:   --secondary-foreground: #e0e0e0;\n62:   --muted: #181818;\n63:   --muted-foreground: #808080;\n64:   --accent: #2a2a2a;\n65:   --accent-foreground: #e0e0e0;\n66:   --destructive: #ea580c;\n67:   --destructive-foreground: #ffffff;\n68:   --border: #303030;\n69:   --input: #2a2a2a;\n70:   --ring: transparent;\n71:   --online: #ff6b00;\n72:   --offline: #808080;\n73:   --warn: #fb923c;\n74:   --term-prompt: #ff6b00;\n75:   --term-path: #808080;\n76:   --term-info: #808080;\n77: \n78:   /* Rings and text-shadow cleanup (no neon text glows) */\n79:   --tw-ring-color: transparent !important;\n80:   --tw-ring-offset-color: transparent !important;\n81: }\n82: \n83: @layer base {\n84:   * {\n85:     border-color: var(--color-border);\n86:   }\n87:   *,\n88:   *::before,\n89:   *::after {\n90:     text-shadow: none !important;\n91:     -webkit-tap-highlight-color: transparent;\n92:   }\n93:   *:focus,\n94:   *:focus-visible {\n95:     outline: none !important;\n96:   }\n97:   html,\n98:   body {\n99:     height: 100%;\n100:     background-color: #161616;\n101:     color: #e0e0e0;\n102:   }\n103:   body {\n104:     font-family: var(--font-sans);\n105:     letter-spacing: -0.015em;\n106:     -webkit-f\n... [Remaining content truncated to conserve context tokens]",
+        "totalLines": 371,
+        "startLine": 1,
+        "endLine": 371,
+        "truncated": false
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "readFile",
+            "args": {
+              "totalLines": 371,
+              "path": "Frontend/guide-build-main/src/styles.css",
+              "endLine": 371,
+              "startLine": 100
+            },
+            "id": "call_1345327"
+          },
+          "thoughtSignature": "EmAKXgFpFH0TH68XndQa88KOxYH4rWQEN58igYuZ1jHzjzxcAueocKCMePWrwPFl3UamOdtZlZC/xDHI3nH40L/QF5KQ2Clg0O26+03nzLfsZPYAnhAXFiPC0DSPSXMti9U="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1345327",
+          "name": "readFile",
+          "args": {
+            "totalLines": 371,
+            "path": "Frontend/guide-build-main/src/styles.css",
+            "endLine": 371,
+            "startLine": 100
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "readFile",
+      "toolCallId": "call_1345327",
+      "content": {
+        "path": "Frontend/guide-build-main/src/styles.css",
+        "content": "100:     background-color: #161616;\n101:     color: #e0e0e0;\n102:   }\n103:   body {\n104:     font-family: var(--font-sans);\n105:     letter-spacing: -0.015em;\n106:     -webkit-font-smoothing: antialiased;\n107:     -moz-osx-font-smoothing: grayscale;\n108:     text-rendering: optimizeLegibility;\n109:   }\n110:   button,\n111:   input,\n112:   textarea,\n113:   select {\n114:     outline: none !important;\n115:   }\n116:   ::-webkit-scrollbar {\n117:     width: 5px;\n118:     height: 5px;\n119:   }\n120:   ::-webkit-scrollbar-track {\n121:     background: #161616;\n122:   }\n123:   ::-webkit-scrollbar-thumb {\n124:     background: #303030;\n125:     border-radius: 2px;\n126:   }\n127:   ::-webkit-scrollbar-thumb:hover {\n128:     background: #404040;\n129:   }\n130: }\n131: \n132: /* =========================================================================\n133:    HARD FABRIC TACTILE SURFACE DEPTH (NO OUTLINE BORDERS, NATURAL SHADOWS)\n134:    ========================================================================= */\n135: .fabric-card {\n136:   background-color: #202020 !important;\n137:   border: none !important;\n138:   box-shadow:\n139:     0 6px 18px -2px rgba(0, 0, 0, 0.65),\n140:     0 2px 6px -1px rgba(0, 0, 0, 0.45),\n141:     inset 0 1px 0 rgba(255, 255, 255, 0.07) !important;\n142: }\n143: \n144: .fabric-card:hover {\n145:   background-color: #252525 !important;\n146:   box-shadow:\n147:     0 8px 24px -2px rgba(0, 0, 0, 0.75),\n148:     0 3px 8px -1px rgba(0, 0, 0, 0.5),\n149:     inset 0 1px 0 rgba(255, 255, 255, 0.09) !important;\n150: }\n151: \n152: .fabric-card-active {\n153:   background-color: #241d17 !important;\n154:   border: none !important;\n155:   box-shadow:\n156:     0 6px 18px -2px rgba(0, 0, 0, 0.7),\n157:     0 2px 6px -1px rgba(0, 0, 0, 0.5),\n158:     inset 0 1px 0 rgba(255, 107, 0, 0.28) !important;\n159: }\n160: \n161: .fabric-btn {\n162:   background-color: #2c2c2c !important;\n163:   border: none !important;\n164:   box-shadow:\n165:     0 2px 6px rgba(0, 0, 0, 0.45),\n166:     inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;\n167: }\n168: \n169: .fabric-btn:hover {\n170:   background-color: #ff6b00 !important;\n171:   color: #ffffff !important;\n172:   box-shadow:\n173:     0 3px 12px rgba(255, 107, 0, 0.45),\n174:     inset 0 1px 0 rgba(255, 255, 255, 0.15) !important;\n175: }\n176: \n177: .fabric-tag {\n178:   background-color: #161616 !important;\n179:   border: none !important;\n180:   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.65) !important;\n181: }\n182: \n183: .fabric-tab-active {\n184:   background-color: #242424 !important;\n185:   border: none !important;\n186:   box-shadow:\n187:     0 3px 10px rgba(0, 0, 0, 0.55),\n188:     inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;\n189: }\n190: \n191: .fabric-tab-inactive {\n192:   background-color: #181818 !important;\n193:   border: none !important;\n194:   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;\n195: }\n196: .fabric-tab-inactive:hover {\n197:   background-color: #1f1f1f !important;\n198: }\n199: \n200: /* =========================================================================\n201:    XTERM.JS CORE STYLES & BULLETPROOF HIGH-CONTRAST CURSOR\n202:    ========================================================================= */\n203: .xterm {\n204:   position: relative;\n205:   user-select: none;\n206:   -ms-user-select: none;\n207:   -webkit-user-select: none;\n208:   cursor: text;\n209: }\n210: .xterm.focus,\n211: .xterm:focus {\n212:   outline: none !important;\n213: }\n214: .xterm .xterm-helpers {\n215:   position: absolute;\n\n... [Remaining content truncated to conserve context tokens]",
+        "totalLines": 371,
+        "startLine": 100,
+        "endLine": 371,
+        "truncated": true
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "readFile",
+            "args": {
+              "startLine": 210,
+              "endLine": 371,
+              "totalLines": 371,
+              "path": "Frontend/guide-build-main/src/styles.css"
+            },
+            "id": "call_1561404"
+          },
+          "thoughtSignature": "EmAKXgFpFH0TA0mHlKzWuk/jNZXKOyzy4rQG40KYIOjYKugX0tQYr5KMX+XHWJfhfxp/dzL9RsDZZYTRVr5+NEs7JLBog/Wsgb4ZmkW76ivOiY23VX1CVlhHEQf/TTwjtHo="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1561404",
+          "name": "readFile",
+          "args": {
+            "startLine": 210,
+            "endLine": 371,
+            "totalLines": 371,
+            "path": "Frontend/guide-build-main/src/styles.css"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "readFile",
+      "toolCallId": "call_1561404",
+      "content": {
+        "path": "Frontend/guide-build-main/src/styles.css",
+        "content": "210: .xterm.focus,\n211: .xterm:focus {\n212:   outline: none !important;\n213: }\n214: .xterm .xterm-helpers {\n215:   position: absolute;\n216:   top: 0;\n217:   z-index: 5;\n218: }\n219: .xterm .xterm-helper-textarea {\n220:   padding: 0;\n221:   border: 0;\n222:   margin: 0;\n223:   position: absolute;\n224:   opacity: 0;\n225:   left: -9999em;\n226:   top: 0;\n227:   width: 0;\n228:   height: 0;\n229:   z-index: -5;\n230:   white-space: nowrap;\n231:   overflow: hidden;\n232:   resize: none;\n233: }\n234: .xterm .composition-view {\n235:   background: #000;\n236:   color: #fff;\n237:   z-index: 1;\n238:   top: 0;\n239:   left: 0;\n240: }\n241: .xterm .composition-view.terminated {\n242:   display: none;\n243: }\n244: .xterm .xterm-viewport {\n245:   background-color: transparent;\n246:   overflow-y: scroll;\n247:   cursor: default;\n248:   position: absolute;\n249:   right: 0;\n250:   left: 0;\n251:   top: 0;\n252:   bottom: 0;\n253: }\n254: .xterm .xterm-viewport::-webkit-scrollbar {\n255:   width: 5px;\n256: }\n257: .xterm .xterm-viewport::-webkit-scrollbar-track {\n258:   background: transparent;\n259: }\n260: .xterm .xterm-viewport::-webkit-scrollbar-thumb {\n261:   background: #333333;\n262:   border-radius: 2px;\n263: }\n264: .xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {\n265:   background: #555555;\n266: }\n267: .xterm .xterm-screen {\n268:   position: relative;\n269: }\n270: .xterm .xterm-screen canvas {\n271:   position: absolute;\n272:   left: 0;\n273:   top: 0;\n274: }\n275: .xterm-scroll-area {\n276:   visibility: hidden;\n277: }\n278: .xterm-char-measure-element {\n279:   display: inline-block;\n280:   visibility: hidden;\n281:   position: absolute;\n282:   top: 0;\n283:   left: -9999em;\n284:   line-height: normal;\n285: }\n286: .xterm .xterm-cursor-layer {\n287:   position: absolute;\n288:   top: 0;\n289:   left: 0;\n290: }\n291: \n292: /* Antigravity IDE Window Title Bar Drag Regions */\n293: .app-drag-region {\n294:   -webkit-app-region: drag;\n295:   user-select: none;\n296: }\n297: \n298: .app-no-drag {\n299:   -webkit-app-region: no-drag;\n300: }\n301: \n302: /* =========================================================================\n303:    AI CHAT MESSAGE SMOOTH FADE ANIMATION\n304:    ========================================================================= */\n305: @keyframes aiMessageFadeIn {\n306:   0% {\n307:     opacity: 0;\n308:     transform: translateY(7px);\n309:   }\n310:   100% {\n311:     opacity: 1;\n312:     transform: translateY(0);\n313:   }\n314: }\n315: \n316: .ai-message-fade {\n317:   animation: aiMessageFadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;\n318:   will-change: opacity, transform;\n319: }\n320: \n321: @keyframes streamTokenFade {\n322:   0% {\n323:     opacity: 0;\n324:     filter: blur(2px);\n325:     transform: translateY(1px);\n326:   }\n327:   100% {\n328:     opacity: 1;\n329:     filter: blur(0);\n330:     transform: translateY(0);\n331:   }\n332: }\n333: \n334: .stream-faded-token {\n335:   animation: streamTokenFade 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;\n336: }\n337: \n338: @keyframes cursorBlinkGlow {\n339:   0%,\n340:   100% {\n341:     opacity: 1;\n342:     box-shadow: 0 0 6px rgba(0, 132, 255, 0.9);\n343:   }\n344:   50% {\n345:     opacity: 0.2;\n346:     box-shadow: none;\n347:   }\n348: }\n349: \n350: .streaming-cursor {\n351:   display: inline-block;\n352:   width: 2px;\n353:   height: 13px;\n354:   margin-left: 3px;\n355:   background-color: #0084ff;\n356:   animation: cursorBlinkGlow 0.8s ease-in-out infinite;\n357:   vertical-align: middle;\n358:   border-radius: 1px;\n359: }\n360: \n\n... [Remaining content truncated to conserve context tokens]",
+        "totalLines": 371,
+        "startLine": 210,
+        "endLine": 371,
+        "truncated": true
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "readFile",
+            "args": {
+              "totalLines": 375,
+              "startLine": 340,
+              "path": "Frontend/guide-build-main/src/styles.css",
+              "endLine": 375
+            },
+            "id": "call_2058569"
+          },
+          "thoughtSignature": "EmAKXgFpFH0Tmx4YzX21DOlr+uo3DVV6d9r3BisfCuDWUIwnW6O/haAhMNtLZapgmiWiwA8mNlFIy9kUMFCd5+02rRUhO812EEzlifRBWJW8ZrWWTUEQQPKrljWG11ZVMUM="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_2058569",
+          "name": "readFile",
+          "args": {
+            "totalLines": 375,
+            "startLine": 340,
+            "path": "Frontend/guide-build-main/src/styles.css",
+            "endLine": 375
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "readFile",
+      "toolCallId": "call_2058569",
+      "content": {
+        "path": "Frontend/guide-build-main/src/styles.css",
+        "content": "340:   100% {\n341:     opacity: 1;\n342:     box-shadow: 0 0 6px rgba(0, 132, 255, 0.9);\n343:   }\n344:   50% {\n345:     opacity: 0.2;\n346:     box-shadow: none;\n347:   }\n348: }\n349: \n350: .streaming-cursor {\n351:   display: inline-block;\n352:   width: 2px;\n353:   height: 13px;\n354:   margin-left: 3px;\n355:   background-color: #0084ff;\n356:   animation: cursorBlinkGlow 0.8s ease-in-out infinite;\n357:   vertical-align: middle;\n358:   border-radius: 1px;\n359: }\n360: \n361: /* Monaco Editor Diff Highlights matching Screenshot 2 */\n362: .monaco-diff-delete-line {\n363:   background-color: rgba(239, 68, 68, 0.22) !important;\n364:   border-left: 3px solid #ef4444 !important;\n365: }\n366: \n367: .monaco-diff-add-line {\n368:   background-color: rgba(34, 197, 94, 0.22) !important;\n369:   border-left: 3px solid #22c55e !important;\n370: }\n371: ",
+        "totalLines": 371,
+        "startLine": 340,
+        "endLine": 371,
+        "truncated": true
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "runTerminal",
+            "args": {
+              "command": "npm --prefix Frontend/guide-build-main run build"
+            },
+            "id": "call_1562957"
+          },
+          "thoughtSignature": "EmAKXgFpFH0TLgNdl5LoZ5ooKVTgZJuY0dN8opFcbzPswTc8KQxnDWeVEInIU1K+GG9LjFdXKkYbrUF1pVVa+NQzGuiV8ZZ9mb/XnmxYhQZQfOfDVTucdGp5n3jLGWP4xgs="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1562957",
+          "name": "runTerminal",
+          "args": {
+            "command": "npm --prefix Frontend/guide-build-main run build"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "runTerminal",
+      "toolCallId": "call_1562957",
+      "content": {
+        "command": "npm --prefix Frontend/guide-build-main run build",
+        "output": "\n> build\n> vite build\n\nvite v8.1.5 building client environment for production...\n\u001b[2K\rtransforming...✓ 2006 modules transformed.\nrendering chunks...\ncomputing gzip size...\n.output/public/assets/styles-epMXeTGl.css           110.63 kB │ gzip:  19.99 kB\n.output/public/assets/rolldown-runtime-Bh1tDfsg.js    0.56 kB │ gzip:   0.36 kB\n.output/public/assets/addon-fit-HLcUUmc2.js           1.49 kB │ gzip:   0.65 kB\n.output/public/assets/xterm-DgnrSxjo.js             287.25 kB │ gzip:  67.83 kB\n.output/public/assets/routes-RTbriNHN.js            478.13 kB │ gzip: 116.27 kB\n.output/public/assets/index-D0sLwszy.js             602.58 kB │ gzip: 187.59 kB\n\n✓ built in 652ms\nvite v8.1.5 building ssr environment for production...\n\u001b[2K\rtransforming...✓ 94 modules transformed.\nrendering chunks...\ncomputing gzip size...\nnode_modules/.nitro/vite/services/ssr/assets/styles-epMXeTGl.css                     110.63 kB │ gzip: 19.99 kB\nnode_modules/.nitro/vite/services/ssr/assets/empty-plugin-adapters-CykxgOdX.js         0.23 kB │ gzip:  0.16 kB\nnode_modules/.nitro/vite/services/ssr/assets/_tanstack-start-manifest_v-Da_7Dq9Q.js    0.62 kB │ gzip:  0.35 kB\nnode_modules/.nitro/vite/services/ssr/assets/start-DELooK1w.js                         1.58 kB │ gzip:  0.71 kB\nnode_modules/.nitro/vite/services/ssr/assets/createCsrfMiddleware-s0u34ry8.js          3.38 kB │ gzip:  1.09 kB\nnode_modules/.nitro/vite/services/ssr/index.js                                         4.61 kB │ gzip:  1.92 kB\nnode_modules/.nitro/vite/services/ssr/assets/router-BAwE3nLp.js                        8.42 kB │ gzip:  2.28 kB\nnode_modules/.nitro/vite/services/ssr/assets/server-yfL1Pf_B.js                       67.60 kB │ gzip: 17.32 kB\nnode_modules/.nitro/vite/services/ssr/assets/routes-BnpFsZKT.js                      522.99 kB │ gzip: 86.30 kB\n\n✓ built in 147ms\n\n[nitro] ◐ Building [Nitro] (preset: cloudflare-module, compatibility: 2026-10-11)\n[nitro] ✔ Generated public .output/public\nvite v8.1.5 building nitro environment for production...\n\u001b[2K\rtransforming...✓ 2032 modules transformed.\nrendering chunks...\ncomputing gzip size...\n.output/server/_ssr/empty-plugin-adapters-CykxgOdX.mjs    0.23 kB │ gzip:   0.16 kB\n.output/server/_chunks/ssr-renderer.mjs                   0.61 kB │ gzip:   0.36 kB\n.output/server/_tanstack-start-manifest_v-Da_7Dq9Q.mjs    0.68 kB │ gzip:   0.39 kB\n.output/server/_libs/react.mjs                            0.81 kB │ gzip:   0.40 kB\n.output/server/_runtime.mjs                               1.14 kB │ gzip:   0.57 kB\n.output/server/_libs/hookable.mjs                         1.17 kB │ gzip:   0.52 kB\n.output/server/_libs/radix-ui__react-compose-refs.mjs     1.24 kB │ gzip:   0.59 kB\n.output/server/_ssr/start-DELooK1w.mjs                    1.53 kB │ gzip:   0.70 kB\n.output/server/_libs/tanstack__react-query.mjs            1.60 kB │ gzip:   0.73 kB\n.output/server/_libs/radix-ui__primitive.mjs              1.83 kB │ gzip:   0.72 kB\n.output/server/_libs/xterm__addon-fit.mjs                 2.01 kB │ gzip:   0.83 kB\n.output/server/_libs/class-variance-authority+clsx.mjs    3.18 kB │ gzip:   1.25 kB\n.output/server/_ssr/createCsrfMiddleware-s0u34ry8.mjs     3.28 kB │ gzip:   1.08 kB\n.output/server/_ssr/ssr.mjs                               4.55 kB │ gzip:   1.92 kB\n.output/server/_libs/radix-ui__react-context+react.mjs    5.75 kB │ gzip:   1.68 kB\n.output/server/_ssr/router-BAwE3nLp.mjs                   9.22 kB │ gzip:   2.40 kB\n.output/server/_libs/h3-v2+rou3+srvx.mjs                  9.89 kB │ gzip:   3.06 kB\n.output/server/index.mjs                                 10.44 kB │ gzip:   3.34 kB\n.output/server/_libs/tanstack__history.mjs               12.51 kB │ gzip:   3.71 kB\n.output/server/_libs/@monaco-editor/loader+[...].mjs     15.87 kB │ gzip:   4.53 kB\n.output/server/_libs/h3+rou3+srvx.mjs                    17.35 kB │ gzip:   4.99 kB\n.output/server/_libs/monaco-editor__react+react.mjs      24.84 kB │ gzip:   6.79 kB\n.output/server/_libs/@tanstack/router-core+[...].mjs     29.69 kB │ gzip:   8.00 kB\n.output/server/_libs/lucide-react.mjs                    30.82 kB │ gzip:   5.83 kB\n.output/server/_ssr/server-yfL1Pf_B.mjs                  65.91 kB │ gzip:  17.19 kB\n.output/server/_libs/react-resizable-panels.mjs          77.89 kB │ gzip:  22.98 kB\n.output/server/_libs/tanstack__query-core.mjs            88.54 kB │ gzip:  21.19 kB\n.output/server/_libs/tailwind-merge.mjs                  88.93 kB │ gzip:  15.71 kB\n.output/server/_libs/@radix-ui/react-dialog+[...].mjs    90.54 kB │ gzip:  21.26 kB\n.output/server/_libs/xterm__xterm.mjs                   372.13 kB │ gzip:  75.32 kB\n.output/server/_ssr/routes-BnpFsZKT.mjs                 549.95 kB │ gzip:  87.32 kB\n.output/server/_libs/@tanstack/react-router+[...].mjs   783.28 kB │ gzip: 165.22 kB\n\n✓ built in 228ms\n[nitro] ℹ Using auto generated worker name: adityas-god-third-eye-frontend-guide-build-main\nℹ Generated .output/server/wrangler.json\nℹ Generated .wrangler/deploy/config.json\nℹ Generated .output/public/_headers\nℹ Generated .output/nitro.json\n\n[nitro] ✔ You can preview this build using npx vite preview\n[nitro] ✔ You can deploy this build using npx nitro deploy --prebuilt\n\nThe plugin \"vite-tsconfig-paths\" is detected. Vite now supports tsconfig paths resolution natively via the resolve.tsconfigPaths option. You can remove the plugin and set resolve.tsconfigPaths: true in your Vite config instead.\n[plugin builtin:vite-reporter] \n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n\n WARN  inlineDynamicImports option is ignored because the codeSplitting option is specified.\n\n",
+        "exitCode": 0,
+        "durationMs": 2336,
+        "background": false,
+        "truncated": false
+      }
+    }
+  ],
+  "timestamp": 1791733744015
+}

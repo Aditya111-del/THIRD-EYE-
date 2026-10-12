@@ -1,129 +1,84 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { Copy, Clipboard, Check, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { Copy, Clipboard } from "lucide-react";
 import type { Session } from "@/types/terminal";
 import { copyToClipboard, readFromClipboard } from "@/lib/clipboard";
-import { TerminalGutter } from "./TerminalGutter";
-import { TerminalMinimap } from "./TerminalMinimap";
+import {
+  setActiveXtermInstance,
+  getActiveXtermInstance,
+  sessionDataCache,
+  appendSessionDataCache,
+  setSessionDataCache,
+} from "./terminalState";
 
-// Global reference to the currently active Xterm instance for TitleBar / Toolbar actions
-let activeXtermInstance: any = null;
-let lastGlobalPasteTimestamp = 0;
-let lastGlobalPastedContent = "";
+// Cached module references for dynamic loading
+let cachedXtermModules: { Terminal: any; FitAddon: any } | null = null;
 
-export function getActiveTerminalSelection(): string {
-  if (activeXtermInstance && typeof activeXtermInstance.hasSelection === "function" && activeXtermInstance.hasSelection()) {
-    return activeXtermInstance.getSelection?.() || "";
+async function loadXterm(): Promise<{ Terminal: any; FitAddon: any }> {
+  if (cachedXtermModules) return cachedXtermModules;
+  if (typeof window === "undefined") {
+    throw new Error("Xterm can only run in the browser");
   }
-  return "";
-}
 
-export function pasteToActiveTerminal(text: string) {
-  if (!text) return;
-  const now = Date.now();
-  if (now - lastGlobalPasteTimestamp < 350 && text === lastGlobalPastedContent) {
-    return;
-  }
-  lastGlobalPasteTimestamp = now;
-  lastGlobalPastedContent = text;
-
-  if (activeXtermInstance) {
-    activeXtermInstance.paste?.(text);
-  }
-}
-
-/**
- * Extract live terminal buffer lines directly from the active Xterm instance
- * Captures all lines, outputs, commands, and logs currently loaded in the active terminal
- */
-export function getActiveTerminalBufferLines(maxLines: number = 300): string[] {
-  if (!activeXtermInstance || !activeXtermInstance.buffer || !activeXtermInstance.buffer.active) {
-    return [];
-  }
-  try {
-    const buf = activeXtermInstance.buffer.active;
-    const lines: string[] = [];
-    const count = Math.min(maxLines, buf.length);
-    const start = Math.max(0, buf.length - count);
-    for (let i = start; i < buf.length; i++) {
-      const line = buf.getLine(i);
-      if (line) {
-        lines.push(line.translateToString(true));
-      }
-    }
-    // Clean trailing empty lines
-    while (lines.length > 0 && lines[lines.length - 1].trim() === "") {
-      lines.pop();
-    }
-    return lines;
-  } catch (_e) {
-    return [];
-  }
-}
-
-// Helper to dynamically load Xterm.js and FitAddon from CDN or window
-function loadXterm(): Promise<{ Terminal: any; FitAddon: any }> {
-  return new Promise((resolve, reject) => {
-    if ((window as any).Terminal && (window as any).FitAddon?.FitAddon) {
-      return resolve({
-        Terminal: (window as any).Terminal,
-        FitAddon: (window as any).FitAddon.FitAddon,
-      });
-    }
-
-    // Ensure CSS is present
-    if (!document.getElementById("xterm-css")) {
-      const link = document.createElement("link");
-      link.id = "xterm-css";
-      link.rel = "stylesheet";
-      link.href = "https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css";
-      document.head.appendChild(link);
-    }
-
-    const loadScript = (src: string): Promise<void> => {
-      return new Promise((res, rej) => {
-        const s = document.createElement("script");
-        s.src = src;
-        s.async = true;
-        s.onload = () => res();
-        s.onerror = (e) => rej(e);
-        document.head.appendChild(s);
-      });
+  // 1. Check window global
+  if ((window as any).Terminal && (window as any).FitAddon?.FitAddon) {
+    cachedXtermModules = {
+      Terminal: (window as any).Terminal,
+      FitAddon: (window as any).FitAddon.FitAddon,
     };
-
-    loadScript("https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js")
-      .then(() => loadScript("https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js"))
-      .then(() => {
-        resolve({
-          Terminal: (window as any).Terminal,
-          FitAddon: (window as any).FitAddon.FitAddon,
-        });
-      })
-      .catch(reject);
-  });
-}
-
-// Global buffer cache so session data is preserved when switching tabs
-export const sessionDataCache: Map<string, string[]> = new Map();
-
-export function clearSessionDataCache(sessionId?: string) {
-  if (sessionId) {
-    sessionDataCache.delete(sessionId);
-  } else {
-    sessionDataCache.clear();
+    return cachedXtermModules;
   }
+
+  // 2. Load via dynamic ES import
+  try {
+    const [termMod, fitMod] = await Promise.all([
+      import("@xterm/xterm"),
+      import("@xterm/addon-fit"),
+    ]);
+    const Terminal = termMod.Terminal || (termMod as any).default?.Terminal || (termMod as any).default;
+    const FitAddon = fitMod.FitAddon || (fitMod as any).default?.FitAddon || (fitMod as any).default;
+    cachedXtermModules = { Terminal, FitAddon };
+    return cachedXtermModules;
+  } catch (err) {
+    console.warn("[XtermView] Dynamic import failed, falling back to script loader:", err);
+  }
+
+  // 3. Fallback script injection
+  if (!document.getElementById("xterm-css")) {
+    const link = document.createElement("link");
+    link.id = "xterm-css";
+    link.rel = "stylesheet";
+    link.href = "https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/css/xterm.css";
+    document.head.appendChild(link);
+  }
+
+  const loadScript = (src: string): Promise<void> => {
+    return new Promise((res, rej) => {
+      const s = document.createElement("script");
+      s.src = src;
+      s.async = true;
+      s.onload = () => res();
+      s.onerror = (e) => rej(e);
+      document.head.appendChild(s);
+    });
+  };
+
+  await loadScript("https://cdn.jsdelivr.net/npm/@xterm/xterm@5.5.0/lib/xterm.js");
+  await loadScript("https://cdn.jsdelivr.net/npm/@xterm/addon-fit@0.10.0/lib/addon-fit.js");
+
+  cachedXtermModules = {
+    Terminal: (window as any).Terminal,
+    FitAddon: (window as any).FitAddon.FitAddon,
+  };
+  return cachedXtermModules;
 }
 
-interface XtermViewProps {
+export interface XtermViewProps {
   session: Session;
   showLineNumbers?: boolean;
   showMinimap?: boolean;
 }
 
-export function XtermView({
-  session,
-  showLineNumbers = true,
-  showMinimap = true,
-}: XtermViewProps) {
+export function XtermView({ session }: XtermViewProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<any>(null);
   const fitAddonRef = useRef<any>(null);
@@ -133,90 +88,111 @@ export function XtermView({
   const lastRowsRef = useRef(0);
   const performPasteRef = useRef<(text: string) => void>(() => {});
 
-  // Synchronized Terminal Buffer Metrics
-  const [viewportY, setViewportY] = useState(0);
-  const [rows, setRows] = useState(24);
-  const [cursorBaseY, setCursorBaseY] = useState(0);
-  const [totalLines, setTotalLines] = useState(24);
-  const [rowHeight, setRowHeight] = useState(19);
-
-  // Sync metrics directly from active Xterm buffer
-  const syncBufferMetrics = useCallback((term: any) => {
-    if (!term || !term.buffer || !term.buffer.active) return;
-    const buf = term.buffer.active;
-    setViewportY(buf.viewportY || 0);
-    setRows(term.rows || 24);
-    setCursorBaseY((buf.baseY || 0) + (buf.cursorY || 0));
-    setTotalLines(Math.max(buf.length || 24, term.rows || 24));
-
-    // Measure exact cell height
-    const cssCellH = term._core?._renderService?.dimensions?.css?.cell?.height;
-    if (typeof cssCellH === "number" && cssCellH > 10) {
-      setRowHeight(cssCellH);
-    } else if (containerRef.current) {
-      const charMeasure = containerRef.current.querySelector(".xterm-char-measure-element");
-      if (charMeasure) {
-        const measured = charMeasure.getBoundingClientRect().height;
-        if (measured > 10) setRowHeight(measured);
-      }
-    }
-  }, []);
-
   useEffect(() => {
     let disposed = false;
     let onDataDisposable: any = null;
-    let onScrollDisposable: any = null;
-    let onLineFeedDisposable: any = null;
-    let onCursorMoveDisposable: any = null;
-    let onRenderDisposable: any = null;
     let unsubscribePty: (() => void) | null = null;
     let ro: ResizeObserver | null = null;
     let resizeTimer: any = null;
-    let onWinFocus: (() => void) | null = null;
     let containerEl: HTMLDivElement | null = null;
     let onDomPaste: ((e: ClipboardEvent) => void) | null = null;
+    let fallbackWs: WebSocket | null = null;
 
     loadXterm()
       .then(({ Terminal, FitAddon }) => {
         if (disposed || !containerRef.current) return;
         setLoading(false);
 
+        // VS Code integrated terminal styling
         const term = new Terminal({
           cursorBlink: true,
           cursorStyle: "block",
-          cursorInactiveStyle: "block",
-          cursorWidth: 2,
-          fontFamily: '"JetBrains Mono", "Cascadia Code", Consolas, monospace',
+          cursorInactiveStyle: "outline",
+          cursorWidth: 1,
+          fontFamily: '"JetBrains Mono", "Cascadia Code", Menlo, Monaco, Consolas, "Courier New", monospace',
           fontSize: 13,
-          lineHeight: 1.45,
+          lineHeight: 1.25,
+          letterSpacing: 0,
           theme: {
-            background: "#222222",
-            foreground: "#E0E0E0",
-            cursor: "#FF6B00",
-            cursorAccent: "#222222",
-            selectionBackground: "rgba(255, 107, 0, 0.25)",
-            black: "#181818",
-            red: "#F87171",
-            green: "#4ADE80",
-            yellow: "#FACC15",
-            blue: "#38BDF8",
-            magenta: "#C084FC",
-            cyan: "#22D3EE",
-            white: "#E0E0E0",
-            brightBlack: "#555555",
-            brightRed: "#F87171",
-            brightGreen: "#4ADE80",
-            brightYellow: "#FDE047",
-            brightBlue: "#38BDF8",
-            brightMagenta: "#C084FC",
-            brightCyan: "#22D3EE",
+            background: "#181818",
+            foreground: "#CCCCCC",
+            cursor: "#FFFFFF",
+            cursorAccent: "#181818",
+            selectionBackground: "rgba(255, 255, 255, 0.22)",
+            black: "#000000",
+            red: "#CD3131",
+            green: "#0DBC79",
+            yellow: "#E5E510",
+            blue: "#2472C8",
+            magenta: "#BC3FBC",
+            cyan: "#11A8CD",
+            white: "#E5E5E5",
+            brightBlack: "#666666",
+            brightRed: "#F14C4C",
+            brightGreen: "#23D18B",
+            brightYellow: "#F5F543",
+            brightBlue: "#3B8EEA",
+            brightMagenta: "#D670D6",
+            brightCyan: "#29B8DB",
             brightWhite: "#FFFFFF",
           },
+          allowTransparency: false,
+          convertEol: true,
+          scrollback: 5000,
         });
 
         const fitAddon = new FitAddon();
         term.loadAddon(fitAddon);
         term.open(containerRef.current);
+
+        termRef.current = term;
+        fitAddonRef.current = fitAddon;
+        setActiveXtermInstance(term);
+
+        // Restore cached session data or replay buffer directly from native PTY
+        const sessionId = session.id;
+        const ptyId = session.ptyId || session.id;
+        const cached = sessionDataCache.get(sessionId) || sessionDataCache.get(ptyId);
+
+        const stripZshEolMark = (raw: string) => {
+          return raw.replace(/^%[ ]{10,}\r[ ]*\r?/g, "");
+        };
+
+        if (cached && cached.length > 0) {
+          term.write(stripZshEolMark(cached.join("")));
+        }
+
+        // Replay full buffer from Electron PTY to catch any missed chunks
+        if (window.electronAPI?.terminal?.getBuffer && ptyId) {
+          window.electronAPI.terminal.getBuffer(ptyId).then((buf: string) => {
+            if (disposed || !termRef.current || !buf) return;
+            const cleanBuf = stripZshEolMark(buf);
+            const currentCached = sessionDataCache.get(sessionId);
+            if (!currentCached || currentCached.length === 0) {
+              termRef.current.write(cleanBuf);
+              setSessionDataCache(sessionId, [cleanBuf]);
+            } else {
+              const fullCachedStr = currentCached.join("");
+              if (cleanBuf.length > fullCachedStr.length && cleanBuf.startsWith(fullCachedStr)) {
+                const delta = cleanBuf.slice(fullCachedStr.length);
+                termRef.current.write(delta);
+                appendSessionDataCache(sessionId, delta);
+              }
+            }
+          }).catch(() => {});
+        }
+
+        // Initial fit & trigger prompt display
+        try {
+          fitAddon.fit();
+          const c = term.cols;
+          const r = term.rows;
+          if (c > 0 && r > 0 && window.electronAPI && ptyId) {
+            lastColsRef.current = c;
+            lastRowsRef.current = r;
+            window.electronAPI.terminal.resize(ptyId, c, r);
+          }
+        } catch {}
 
         let lastLocalPasteTimestamp = 0;
         let lastLocalPastedContent = "";
@@ -224,20 +200,18 @@ export function XtermView({
         const performPaste = (text: string) => {
           if (!text) return;
           const now = Date.now();
-          // Reject duplicate paste if identical content arrived within 350ms
           if (
-            (now - lastLocalPasteTimestamp < 350 && text === lastLocalPastedContent) ||
-            (now - lastGlobalPasteTimestamp < 350 && text === lastGlobalPastedContent)
+            now - lastLocalPasteTimestamp < 350 &&
+            text === lastLocalPastedContent
           ) {
             return;
           }
           lastLocalPasteTimestamp = now;
           lastLocalPastedContent = text;
-          lastGlobalPasteTimestamp = now;
-          lastGlobalPastedContent = text;
 
-          if (window.electronAPI && session.ptyId) {
-            window.electronAPI.terminal.write(session.ptyId, text);
+          const targetId = session.ptyId || session.id;
+          if (window.electronAPI && targetId) {
+            window.electronAPI.terminal.write(targetId, text);
           } else if (termRef.current) {
             termRef.current.paste(text);
           }
@@ -245,7 +219,7 @@ export function XtermView({
 
         performPasteRef.current = performPaste;
 
-        // Catch and handle native browser paste event in capture phase to prevent double injection
+        // Native paste handler
         containerEl = containerRef.current;
         onDomPaste = (pasteEvent: ClipboardEvent) => {
           pasteEvent.preventDefault();
@@ -264,173 +238,104 @@ export function XtermView({
           containerEl.addEventListener("paste", onDomPaste, true);
         }
 
-        // Keyboard handler for Zoom, Copy (Ctrl+C), Paste (Ctrl+V) and Shortcuts
+        // Keystroke handler (Copy on Ctrl/Cmd+C if text selected, Paste on Ctrl/Cmd+V)
         term.attachCustomKeyEventHandler((e: KeyboardEvent) => {
           const isCtrlOrCmd = e.ctrlKey || e.metaKey;
 
           if (isCtrlOrCmd) {
-            // 1. Zoom Controls (Ctrl + =, Ctrl + -, Ctrl + 0)
-            if (
-              e.key === '=' ||
-              e.key === '+' ||
-              e.key === '-' ||
-              e.key === '_' ||
-              e.key === '0' ||
-              e.code === 'NumpadAdd' ||
-              e.code === 'NumpadSubtract' ||
-              e.code === 'Equal' ||
-              e.code === 'Minus' ||
-              e.code === 'Digit0' ||
-              e.code === 'Numpad0'
-            ) {
+            // Zoom controls
+            if (e.key === '=' || e.key === '+' || e.key === '-' || e.key === '_' || e.key === '0') {
               if (e.type === 'keydown') {
-                if (e.key === '=' || e.key === '+' || e.code === 'NumpadAdd' || e.code === 'Equal') {
-                  if (window.electronAPI?.window?.zoomIn) window.electronAPI.window.zoomIn();
-                } else if (e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract' || e.code === 'Minus') {
-                  if (window.electronAPI?.window?.zoomOut) window.electronAPI.window.zoomOut();
-                } else if (e.key === '0' || e.code === 'Digit0' || e.code === 'Numpad0') {
-                  if (window.electronAPI?.window?.resetZoom) window.electronAPI.window.resetZoom();
+                if (e.key === '=' || e.key === '+') {
+                  window.electronAPI?.window?.zoomIn?.();
+                } else if (e.key === '-' || e.key === '_') {
+                  window.electronAPI?.window?.zoomOut?.();
+                } else if (e.key === '0') {
+                  window.electronAPI?.window?.resetZoom?.();
                 }
-              }
-              return false; // Do not send zoom keystrokes to PTY
-            }
-
-            // 2. COPY (Ctrl+C / Ctrl+Shift+C)
-            // If user has highlighted text in terminal, copy to clipboard instead of sending SIGINT!
-            if (e.key === 'c' || e.key === 'C') {
-              const hasSel = Boolean(term.hasSelection && term.hasSelection());
-              if (e.shiftKey || hasSel) {
-                if (e.type === 'keydown') {
-                  const selectedText = term.getSelection ? term.getSelection() : '';
-                  if (selectedText) {
-                    copyToClipboard(selectedText);
-                  }
-                }
-                return false; // Intercept: do not terminate running command when copying text
-              }
-              // If NO text is selected, let Ctrl+C pass through to PTY as SIGINT to interrupt process
-              return true;
-            }
-
-            // 3. PASTE (Ctrl+V / Ctrl+Shift+V)
-            if (e.key === 'v' || e.key === 'V') {
-              // Crucial: prevent browser default paste event to avoid duplicate entry!
-              e.preventDefault();
-              e.stopPropagation();
-              if (e.type === 'keydown' && !e.repeat) {
-                readFromClipboard().then((clipText) => {
-                  if (clipText) {
-                    performPaste(clipText);
-                  }
-                });
-              }
-              return false; // Intercept: prevent terminal from receiving raw \x16 (SYN)
-            }
-
-            // 4. Select All (Ctrl+Shift+A)
-            if (e.shiftKey && (e.key === 'a' || e.key === 'A')) {
-              if (e.type === 'keydown') {
-                term.selectAll();
               }
               return false;
             }
-          }
 
-          // 5. Shift+Insert (Standard terminal paste shortcut)
-          if (e.shiftKey && e.key === 'Insert') {
-            e.preventDefault();
-            e.stopPropagation();
-            if (e.type === 'keydown' && !e.repeat) {
-              readFromClipboard().then((clipText) => {
-                if (clipText) {
-                  performPaste(clipText);
+            // Copy if text is selected; if not selected, allow Ctrl+C to pass through as SIGINT
+            if (e.key === 'c' || e.key === 'C') {
+              if (term.hasSelection && term.hasSelection()) {
+                const sel = term.getSelection();
+                if (sel) {
+                  copyToClipboard(sel);
+                  return false;
                 }
-              });
+              }
             }
-            return false;
-          }
 
+            // Paste
+            if (e.key === 'v' || e.key === 'V') {
+              if (e.type === 'keydown') {
+                readFromClipboard().then((clip) => {
+                  if (clip) performPaste(clip);
+                });
+              }
+              return false;
+            }
+
+            // Clear terminal on Ctrl+K
+            if (e.key === 'k' || e.key === 'K') {
+              if (e.type === 'keydown') {
+                term.clear();
+                return false;
+              }
+            }
+          }
           return true;
         });
 
-        termRef.current = term;
-        activeXtermInstance = term;
-        fitAddonRef.current = fitAddon;
-
-        // Auto-focus terminal immediately and on any click
-        term.focus();
-        setTimeout(() => term.focus(), 100);
-        setTimeout(() => term.focus(), 300);
-
-        onWinFocus = () => {
-          if (!disposed && termRef.current) {
-            activeXtermInstance = termRef.current;
-            termRef.current.focus();
+        // WebSocket connection for browser preview when running outside Electron
+        if (!window.electronAPI && typeof WebSocket !== "undefined") {
+          try {
+            const targetId = session.ptyId || session.id;
+            fallbackWs = new WebSocket(`ws://localhost:4001/pty/stream?id=${targetId}`);
+            fallbackWs.onmessage = (event) => {
+              try {
+                const parsed = JSON.parse(event.data);
+                const chunk = parsed.data || "";
+                if (chunk && termRef.current) {
+                  termRef.current.write(chunk);
+                  appendSessionDataCache(sessionId, chunk);
+                }
+              } catch {
+                if (event.data && termRef.current) {
+                  termRef.current.write(event.data);
+                  appendSessionDataCache(sessionId, event.data);
+                }
+              }
+            };
+          } catch (e) {
+            console.warn("[XtermView] Fallback WebSocket connection error:", e);
           }
-        };
-        window.addEventListener("focus", onWinFocus);
-
-        // Replay cached history if available and session is not brand new
-        if (session.lines && session.lines.length > 0) {
-          const cached = sessionDataCache.get(session.id);
-          if (cached && cached.length > 0) {
-            for (const chunk of cached) {
-              term.write(chunk);
-            }
-          }
-        } else {
-          sessionDataCache.delete(session.id);
         }
 
-        // Initial fit & resize
-        setTimeout(() => {
-          if (disposed) return;
-          try {
-            fitAddon.fit();
-            syncBufferMetrics(term);
-            const c = term.cols;
-            const r = term.rows;
-            if (window.electronAPI && session.ptyId && c && r) {
-              lastColsRef.current = c;
-              lastRowsRef.current = r;
-              window.electronAPI.terminal.resize(session.ptyId, c, r);
-            }
-          } catch {}
-        }, 60);
-
-        // Listen to buffer changes to keep line numbers & minimap synchronized
-        onScrollDisposable = term.onScroll(() => syncBufferMetrics(term));
-        onLineFeedDisposable = term.onLineFeed(() => syncBufferMetrics(term));
-        onCursorMoveDisposable = term.onCursorMove(() => syncBufferMetrics(term));
-        onRenderDisposable = term.onRender(() => syncBufferMetrics(term));
-
-        // Keystroke forwarding from Xterm to OS PTY
+        // Forward keystrokes to PTY
         onDataDisposable = term.onData((data: string) => {
-          if (window.electronAPI && session.ptyId) {
-            window.electronAPI.terminal.write(session.ptyId, data);
+          const targetId = session.ptyId || session.id;
+          if (window.electronAPI && targetId) {
+            window.electronAPI.terminal.write(targetId, data);
+          } else if (fallbackWs && fallbackWs.readyState === WebSocket.OPEN) {
+            fallbackWs.send(JSON.stringify({ type: "write", data }));
           }
         });
 
-        // Streaming data from OS PTY to Xterm
+        // Stream PTY output into Xterm
         if (window.electronAPI) {
           unsubscribePty = window.electronAPI.terminal.onData((payload) => {
             if (payload.id === session.id || payload.id === session.ptyId) {
-              term.write(payload.data);
-              syncBufferMetrics(term);
-
-              // Append to session cache
-              let list = sessionDataCache.get(session.id);
-              if (!list) {
-                list = [];
-                sessionDataCache.set(session.id, list);
-              }
-              list.push(payload.data);
-              if (list.length > 800) list.shift();
+              const cleanData = stripZshEolMark(payload.data);
+              term.write(cleanData);
+              appendSessionDataCache(sessionId, cleanData);
             }
           });
         }
 
-        // Debounced Resize Observer to eliminate duplicate prompts / blank lines on window maximize
+        // Automatic responsive fit
         ro = new ResizeObserver(() => {
           if (disposed) return;
           if (resizeTimer) clearTimeout(resizeTimer);
@@ -438,22 +343,22 @@ export function XtermView({
             if (disposed || !termRef.current || !fitAddonRef.current) return;
             try {
               fitAddonRef.current.fit();
-              syncBufferMetrics(termRef.current);
               const c = termRef.current.cols;
               const r = termRef.current.rows;
+              const targetId = session.ptyId || session.id;
               if (
                 window.electronAPI &&
-                session.ptyId &&
-                c &&
-                r &&
+                targetId &&
+                c > 0 &&
+                r > 0 &&
                 (c !== lastColsRef.current || r !== lastRowsRef.current)
               ) {
                 lastColsRef.current = c;
                 lastRowsRef.current = r;
-                window.electronAPI.terminal.resize(session.ptyId, c, r);
+                window.electronAPI.terminal.resize(targetId, c, r);
               }
             } catch {}
-          }, 120);
+          }, 60);
         });
         ro.observe(containerRef.current);
 
@@ -467,71 +372,30 @@ export function XtermView({
     return () => {
       disposed = true;
       if (resizeTimer) clearTimeout(resizeTimer);
-      if (onWinFocus) {
-        window.removeEventListener("focus", onWinFocus);
-      }
       if (containerEl && onDomPaste) {
         containerEl.removeEventListener("paste", onDomPaste, true);
       }
-      if (onDataDisposable) onDataDisposable.dispose();
-      if (onScrollDisposable) onScrollDisposable.dispose();
-      if (onLineFeedDisposable) onLineFeedDisposable.dispose();
-      if (onCursorMoveDisposable) onCursorMoveDisposable.dispose();
-      if (onRenderDisposable) onRenderDisposable.dispose();
+      if (fallbackWs) {
+        try {
+          fallbackWs.close();
+        } catch {}
+      }
       if (unsubscribePty) unsubscribePty();
+      if (onDataDisposable) onDataDisposable.dispose();
       if (ro) ro.disconnect();
       if (termRef.current) {
-        if (activeXtermInstance === termRef.current) activeXtermInstance = null;
-        termRef.current.dispose();
+        if (getActiveXtermInstance() === termRef.current) {
+          setActiveXtermInstance(null);
+        }
+        try {
+          termRef.current.dispose();
+        } catch {}
         termRef.current = null;
       }
     };
-  }, [session.id, session.ptyId, syncBufferMetrics]);
+  }, [session.id, session.ptyId]);
 
-  // Handle refit when showLineNumbers or showMinimap toggles
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (fitAddonRef.current && termRef.current) {
-        try {
-          fitAddonRef.current.fit();
-          syncBufferMetrics(termRef.current);
-          const c = termRef.current.cols;
-          const r = termRef.current.rows;
-          if (
-            window.electronAPI &&
-            session.ptyId &&
-            c &&
-            r &&
-            (c !== lastColsRef.current || r !== lastRowsRef.current)
-          ) {
-            lastColsRef.current = c;
-            lastRowsRef.current = r;
-            window.electronAPI.terminal.resize(session.ptyId, c, r);
-          }
-        } catch {}
-      }
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [showLineNumbers, showMinimap, session.ptyId, syncBufferMetrics]);
-
-  // Reset terminal buffer when session lines are cleared (e.g. user clicked Clear or Restart)
-  useEffect(() => {
-    if (session.lines && session.lines.length === 0 && termRef.current) {
-      try {
-        termRef.current.clear();
-        syncBufferMetrics(termRef.current);
-      } catch {}
-    }
-  }, [session.lines?.length, syncBufferMetrics]);
-
-  const handleScrollToLine = (targetLine: number) => {
-    if (termRef.current) {
-      termRef.current.scrollToLine(targetLine);
-      syncBufferMetrics(termRef.current);
-    }
-  };
-
-  // Right-click context menu state
+  // Context Menu State
   const [contextMenu, setContextMenu] = useState<{
     x: number;
     y: number;
@@ -548,8 +412,8 @@ export function XtermView({
     e.preventDefault();
     const hasSelection = Boolean(termRef.current?.hasSelection?.());
     setContextMenu({
-      x: Math.min(e.clientX, window.innerWidth - 190),
-      y: Math.min(e.clientY, window.innerHeight - 160),
+      x: Math.min(e.clientX, window.innerWidth - 180),
+      y: Math.min(e.clientY, window.innerHeight - 150),
       hasSelection,
     });
   };
@@ -572,15 +436,12 @@ export function XtermView({
     termRef.current?.focus();
   };
 
-  const handleContextMenuSelectAll = () => {
-    setContextMenu(null);
-    termRef.current?.selectAll?.();
-  };
-
   const handleContextMenuClear = () => {
     setContextMenu(null);
-    if (window.electronAPI && session.ptyId) {
-      window.electronAPI.terminal.write(session.ptyId, "cls\r\n");
+    const targetId = session.ptyId || session.id;
+    if (window.electronAPI && targetId) {
+      const isWin = typeof navigator !== "undefined" && !/mac|linux/i.test(navigator.userAgent);
+      window.electronAPI.terminal.write(targetId, isWin ? "cls\r" : "clear\r");
     } else {
       termRef.current?.clear?.();
     }
@@ -588,97 +449,58 @@ export function XtermView({
   };
 
   return (
-    <div className="relative h-full w-full bg-[#222222] flex overflow-hidden select-text">
-      {/* 1. LEFT: Line Numbers Gutter */}
-      {showLineNumbers && (
-        <TerminalGutter
-          viewportY={viewportY}
-          rows={rows}
-          cursorBaseY={cursorBaseY}
-          totalLines={totalLines}
-          rowHeight={rowHeight}
-          topPadding={8}
-        />
+    <div
+      className="relative h-full w-full bg-[#181818] overflow-hidden select-text"
+      onClick={() => {
+        setActiveXtermInstance(termRef.current);
+        termRef.current?.focus();
+      }}
+      onContextMenu={handleContextMenu}
+    >
+      {loading && (
+        <div className="absolute inset-0 flex items-center justify-center text-xs text-[#808080] font-mono">
+          Starting terminal…
+        </div>
       )}
+      <div ref={containerRef} className="h-full w-full px-2 py-1 overflow-hidden" />
 
-      {/* 2. CENTER: Interactive Xterm Canvas Viewport */}
-      <div
-        className="relative flex-1 h-full min-w-0 p-2 overflow-hidden bg-[#222222]"
-        onClick={() => {
-          activeXtermInstance = termRef.current;
-          termRef.current?.focus();
-        }}
-        onContextMenu={handleContextMenu}
-      >
-        {loading && (
-          <div className="absolute inset-0 flex items-center justify-center text-xs text-muted-foreground font-mono">
-            Connecting to native OS terminal via Xterm.js...
-          </div>
-        )}
-        <div ref={containerRef} className="h-full w-full overflow-hidden" />
-      </div>
-
-      {/* Sleek Floating Right-Click Context Menu */}
+      {/* Floating Context Menu */}
       {contextMenu && (
         <div
           style={{ left: contextMenu.x, top: contextMenu.y }}
-          className="fixed z-50 min-w-[170px] rounded-md bg-[#1C1C1C] border border-[#303030] shadow-2xl p-1 text-xs text-[#E0E0E0] select-none font-sans animate-in fade-in-50 zoom-in-95"
+          className="fixed z-50 min-w-[160px] rounded bg-[#252526] border border-[#454545] shadow-xl p-1 text-xs text-[#CCCCCC] select-none font-sans"
           onClick={(e) => e.stopPropagation()}
         >
           <button
             onClick={handleContextMenuCopy}
             disabled={!contextMenu.hasSelection}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-[#282828] hover:text-white disabled:opacity-35 disabled:hover:bg-transparent text-left cursor-pointer transition-colors"
+            className="w-full flex items-center justify-between px-2.5 py-1 rounded hover:bg-[#094771] hover:text-white disabled:opacity-40 disabled:hover:bg-transparent text-left cursor-pointer transition-colors"
           >
             <span className="flex items-center gap-2">
-              <Copy className="h-3.5 w-3.5 text-[#FF6B00]" />
+              <Copy className="h-3.5 w-3.5" />
               <span>Copy</span>
             </span>
-            <span className="font-mono text-[10px] text-[#707070]">Ctrl+C</span>
+            <span className="font-mono text-[10px] text-[#808080]">⌘C</span>
           </button>
-
           <button
             onClick={handleContextMenuPaste}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-[#282828] hover:text-white text-left cursor-pointer transition-colors"
+            className="w-full flex items-center justify-between px-2.5 py-1 rounded hover:bg-[#094771] hover:text-white text-left cursor-pointer transition-colors"
           >
             <span className="flex items-center gap-2">
-              <Clipboard className="h-3.5 w-3.5 text-[#FF6B00]" />
+              <Clipboard className="h-3.5 w-3.5" />
               <span>Paste</span>
             </span>
-            <span className="font-mono text-[10px] text-[#707070]">Ctrl+V</span>
+            <span className="font-mono text-[10px] text-[#808080]">⌘V</span>
           </button>
-
-          <div className="h-px bg-[#2C2C2C] my-1" />
-
-          <button
-            onClick={handleContextMenuSelectAll}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-[#282828] hover:text-white text-left cursor-pointer transition-colors"
-          >
-            <span>Select All</span>
-            <span className="font-mono text-[10px] text-[#707070]">Ctrl+A</span>
-          </button>
-
+          <div className="h-px bg-[#3C3C3C] my-1" />
           <button
             onClick={handleContextMenuClear}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded hover:bg-[#282828] hover:text-white text-left cursor-pointer transition-colors"
+            className="w-full flex items-center justify-between px-2.5 py-1 rounded hover:bg-[#094771] hover:text-white text-left cursor-pointer transition-colors"
           >
             <span>Clear Buffer</span>
-            <span className="font-mono text-[10px] text-[#707070]">Ctrl+L</span>
+            <span className="font-mono text-[10px] text-[#808080]">⌘K</span>
           </button>
         </div>
-      )}
-
-      {/* 3. RIGHT: Minimap / Fast Scroller (Matches Image 2) */}
-      {showMinimap && (
-        <TerminalMinimap
-          term={termRef.current}
-          viewportY={viewportY}
-          totalLines={totalLines}
-          rows={rows}
-          cursorBaseY={cursorBaseY}
-          onScrollToLine={handleScrollToLine}
-          width={88}
-        />
       )}
     </div>
   );

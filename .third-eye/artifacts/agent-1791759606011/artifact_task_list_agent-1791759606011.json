@@ -1,0 +1,22 @@
+{
+  "id": "artifact_task_list_agent-1791759606011",
+  "sessionId": "agent-1791759606011",
+  "type": "task_list",
+  "title": "Task List & Execution DAG",
+  "description": "Itemized execution graph with live status tracking for: \"run this project\"",
+  "createdAt": 1791759614252,
+  "updatedAt": 1791759614252,
+  "data": {
+    "goal": "run this project",
+    "items": [
+      {
+        "id": "step_direct_1",
+        "title": "Inspect & Execute: run this project",
+        "description": "run this project",
+        "status": "running",
+        "workerRole": "researcher"
+      }
+    ]
+  },
+  "feedback": []
+}

@@ -4,6 +4,7 @@
   "description": "THIRD EYE - AI Agent Microservice",
   "main": "agent.js",
   "scripts": {
+    "build": "tsc",
     "start": "node agent.js"
   },
   "dependencies": {

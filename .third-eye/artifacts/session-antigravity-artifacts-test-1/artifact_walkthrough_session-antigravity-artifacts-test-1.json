@@ -1,0 +1,29 @@
+{
+  "id": "artifact_walkthrough_session-antigravity-artifacts-test-1",
+  "sessionId": "session-antigravity-artifacts-test-1",
+  "type": "walkthrough",
+  "title": "Operational Execution & Evidence Walkthrough",
+  "description": "Comprehensive deliverable walkthrough with tool-backed verification proof",
+  "createdAt": 1791754335770,
+  "updatedAt": 1791754335770,
+  "data": {
+    "title": "Operational Execution & Evidence Walkthrough",
+    "summary": "The `package.json` file defines several scripts to manage the development, building, and execution of the \"THIRD EYE\" workspace. Here is a summary of the available scripts:\n\n### **Development Scripts**\n*   **`dev` / `dev:full`**: Launches the entire stack concurrently, including the PTY service, AI service, Salesforce service, frontend, and the Electron app.\n*   **`dev:frontend`**: Starts only the frontend development server.\n*   **`dev:electron`**: Launches the Electron application.\n*   **`dev:backend`**: Starts the three backend services (PTY, AI, and Salesforce) concurrently.\n*   **`dev:salesforce`**: Starts only the Salesforce service.\n\n### **Build & Utility Scripts**\n*   **`build`**: A master build command that runs `build:shared`, `build:frontend`, and `build:electron` in sequence.\n*   **`build:shared`**: Builds the shared package.\n*   **`build:frontend`**: Builds the frontend application.\n*   **`build:electron`**: Packages the Electron application using `electron-builder`.\n*   **`rebuild`**: Specifically rebuilds native dependencies (like `node-pty`) for Electron.\n*   **`smoke`**: Runs a smoke test script.\n\n### **Execution**\n*   **`start`**: Launches the Electron application.\n\nThe project uses `concurrently` to manage multiple services simultaneously, which is typical for a monorepo-style setup involving both backend services and an Electron frontend.",
+    "changesMade": [
+      "Inspect & Execute: Inspect package.json and summarize the scripts"
+    ],
+    "touchedFiles": [],
+    "evidence": [
+      {
+        "id": "ev_direct_exec",
+        "name": "Tool Execution Verification Gate",
+        "category": "runtime",
+        "status": "passed",
+        "outputSummary": "Commands and inspection verified cleanly with zero unexpected exits.",
+        "verifiedAt": 1791754335770
+      }
+    ],
+    "knownLimitations": []
+  },
+  "feedback": []
+}

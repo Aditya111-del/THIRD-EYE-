@@ -36,12 +36,15 @@ export function mockReply(q: string, s?: Session, liveLines?: string[]): string 
 
   if (hasDf || loadMatch) {
     const partitionMatches = [...recentText.matchAll(/([^\s]+)\s+([\d.]+[MGTP]?)\s+([\d.]+[MGTP]?)\s+([\d.]+[MGTP]?)\s+(\d{1,3})%\s+([^\r\n]+)/gi)];
-    const highUsage = partitionMatches.filter((m) => parseInt(m[5], 10) >= 70);
+    const highUsage = partitionMatches.filter((m) => {
+      const pct = m[5];
+      return pct !== undefined && parseInt(pct, 10) >= 70;
+    });
     const hasDocker = recentText.includes('/opt/docker') || recentText.includes('overlay');
 
     const findings: string[] = [];
-    if (highUsage.length > 0) {
-      const topPart = highUsage[0];
+    const topPart = highUsage[0];
+    if (topPart && topPart[1] && topPart[2] && topPart[3] && topPart[4] && topPart[5] && topPart[6]) {
       findings.push(`**1. High Disk Usage on \`${topPart[6].trim()}\` (${topPart[5]}% Full — ${topPart[3]} used out of ${topPart[2]})**\nStorage device \`${topPart[1]}\` mounted at \`${topPart[6].trim()}\` has only ${topPart[4]} available.${hasDocker ? ' Multiple `overlay` filesystems show that Docker container layers, images, and build cache in `/opt/docker/overlay2` are using the majority of this space.' : ''}`);
     }
     if (loadMatch) {

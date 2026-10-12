@@ -1,0 +1,17 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "# Prompt: Antigravity-Style AI Agent Working UI & Animations\n\nDesign and implement a premium, real-time AI agent activity interface inspired by Google Antigravity.\n\nThe interface must visually communicate what the AI agent is doing at every moment, from understanding a task to planning, exploring a codebase, delegating work, writing code, running terminal commands, testing, debugging, and completing the task."
+    },
+    {
+      "role": "user",
+      "content": "hi"
+    },
+    {
+      "role": "user",
+      "content": "Please synthesize your findings, explain what was analyzed or modified, and provide the complete answer in clear Markdown with code blocks."
+    }
+  ],
+  "timestamp": 1791767344396
+}

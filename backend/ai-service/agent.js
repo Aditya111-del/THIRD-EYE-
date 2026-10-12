@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 const OpenAI = require('openai');
 
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
@@ -12,16 +13,12 @@ app.use(express.json({ limit: '25mb' }));
 const PORT = process.env.AI_SERVICE_PORT || 4002;
 
 /**
- * Enterprise Vector / Tag Sanitizer
- * Strips raw system emojis and normalizes output into clean vector tags
+ * Enterprise Reply Sanitizer
+ * Preserves markdown formatting, emojis, and inline code badges
  */
 function sanitizeAiReply(text) {
   if (typeof text !== 'string') return '';
-  return text
-    .replace(/[📁📂]\s*/gu, '[dir] ')
-    .replace(/[📄📝]\s*/gu, '[file] ')
-    .replace(/[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]\uFE0F?/gu, '')
-    .trim();
+  return text.trim();
 }
 
 /**
@@ -40,17 +37,39 @@ function stripAnsi(str) {
     .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F\x7F]/g, '');
 }
 
+/**
+ * Reload .env on demand so newly added keys are immediately active
+ */
+function reloadEnvIfNeeded() {
+  try {
+    const envPath = path.join(__dirname, '../../.env');
+    if (fs.existsSync(envPath)) {
+      const parsed = require('dotenv').parse(fs.readFileSync(envPath, 'utf8'));
+      for (const k in parsed) {
+        if (parsed[k] && parsed[k] !== 'your_gemini_api_key_here' && parsed[k] !== 'your_openai_api_key_here') {
+          process.env[k] = parsed[k].trim();
+        }
+      }
+    }
+  } catch (err) {
+    // ignore
+  }
+}
+
 function getGeminiApiKey() {
+  reloadEnvIfNeeded();
   const k = process.env.GEMINI_API_KEY;
   return k && k.trim() !== '' && k !== 'your_gemini_api_key_here' ? k.trim() : null;
 }
 
 let openaiClient = null;
 function getOpenAIClient() {
+  reloadEnvIfNeeded();
   const apiKey = process.env.OPENAI_API_KEY;
-  if (apiKey && apiKey !== 'your_openai_api_key_here') {
-    if (!openaiClient) {
-      openaiClient = new OpenAI({ apiKey });
+  const baseURL = process.env.OPENAI_BASE_URL;
+  if ((apiKey && apiKey !== 'your_openai_api_key_here') || baseURL) {
+    if (!openaiClient || openaiClient.apiKey !== apiKey || openaiClient.baseURL !== baseURL) {
+      openaiClient = new OpenAI({ apiKey: apiKey || 'dummy-key', baseURL: baseURL || undefined });
     }
     return openaiClient;
   }
@@ -58,23 +77,98 @@ function getOpenAIClient() {
 }
 
 /**
+ * Safely resolves a path on disk even if it has trailing spaces
+ */
+function resolveExistingPath(p) {
+  if (!p || typeof p !== 'string') return '';
+  if (fs.existsSync(p)) return p;
+  if (fs.existsSync(p.trim())) return p.trim();
+  if (fs.existsSync(p + ' ')) return p + ' ';
+  if (fs.existsSync(p.trimEnd())) return p.trimEnd();
+  return p;
+}
+
+/**
+ * Infer active project root directory from open tabs, active file, terminal cwd, or workspaceRoot
+ */
+function inferProjectRoot({ cwd, workspaceRoot, activeFile, openTabs, activeDir }) {
+  const candidateFiles = [];
+  if (activeFile && activeFile.path) candidateFiles.push(activeFile.path);
+  if (Array.isArray(openTabs)) {
+    for (const tab of openTabs) {
+      if (tab?.path) candidateFiles.push(tab.path);
+    }
+  }
+
+  for (const fp of candidateFiles) {
+    if (typeof fp === 'string' && (fp.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(fp))) {
+      let cur = path.dirname(fp);
+      while (cur && cur !== '/' && cur !== '/Users' && cur !== '/Users/adityasalgotra' && cur !== '/Users/adityasalgotra/Downloads') {
+        const resolvedCur = resolveExistingPath(cur);
+        if (
+          fs.existsSync(path.join(resolvedCur, 'package.json')) ||
+          fs.existsSync(path.join(resolvedCur, '.git')) ||
+          fs.existsSync(path.join(resolvedCur, '.vscode'))
+        ) {
+          return resolvedCur;
+        }
+        const parent = path.dirname(cur);
+        if (parent === cur) break;
+        cur = parent;
+      }
+    }
+  }
+
+  if (cwd && typeof cwd === 'string') {
+    const resolved = resolveExistingPath(cwd);
+    if (fs.existsSync(resolved)) return resolved;
+    const dlCandidate = resolveExistingPath(path.join('/Users/adityasalgotra/Downloads', cwd));
+    if (fs.existsSync(dlCandidate)) return dlCandidate;
+  }
+
+  if (activeDir && activeDir !== '~' && typeof activeDir === 'string') {
+    const resolved = resolveExistingPath(activeDir);
+    if (fs.existsSync(resolved)) return resolved;
+    const dlCandidate = resolveExistingPath(path.join('/Users/adityasalgotra/Downloads', activeDir));
+    if (fs.existsSync(dlCandidate)) return dlCandidate;
+  }
+
+  if (workspaceRoot && typeof workspaceRoot === 'string') {
+    const resolved = resolveExistingPath(workspaceRoot);
+    if (fs.existsSync(resolved)) return resolved;
+  }
+
+  return resolveExistingPath(process.cwd());
+}
+
+/**
  * Call Google Gemini with multi-model fallback and timeout protection
  */
-async function callGemini({ systemPrompt, prompt, contents, responseJson = false }) {
-  const apiKey = getGeminiApiKey();
+async function callGemini({ apiKey: overrideKey, systemPrompt, prompt, contents, responseJson = false }) {
+  const apiKey = overrideKey || getGeminiApiKey();
   if (!apiKey) throw new Error('GEMINI_API_KEY missing');
 
+  const preferredModel = (process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview').trim();
   const models = [
-    process.env.GEMINI_MODEL || 'gemini-3.8-flash',
+    preferredModel,
+    'gemini-3.1-flash-lite-preview',
+    'gemini-3-flash-preview',
+    'gemini-3.5-flash',
     'gemini-3.8-flash',
-    'gemini-2.5-flash',
-    'gemini-flash-latest',
     'gemini-3.7-flash',
-    'gemini-2.5-pro',
-  ].filter((m, i, arr) => m && arr.indexOf(m) === i);
+    'gemini-3.6-flash',
+    'gemini-3.5-flash-lite',
+    'gemini-flash-lite-latest',
+    'gemini-flash-latest',
+    'gemini-3.1-flash-lite',
+  ].filter((m, i, arr) => m && arr.indexOf(m) === i && !m.includes('2.5') && !m.includes('2.0') && !m.includes('1.5'));
+
+  const safeContents = (Array.isArray(contents) && contents.length > 0)
+    ? contents
+    : [{ role: 'user', parts: [{ text: prompt || systemPrompt || 'Please proceed with the task.' }] }];
 
   const body = {
-    contents: contents || [{ role: 'user', parts: [{ text: prompt || '' }] }],
+    contents: safeContents,
     generationConfig: {
       temperature: responseJson ? 0.2 : 0.4,
     },
@@ -98,7 +192,7 @@ async function callGemini({ systemPrompt, prompt, contents, responseJson = false
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
 
     try {
-      const timeoutSignal = AbortSignal.timeout ? AbortSignal.timeout(45000) : undefined;
+      const timeoutSignal = AbortSignal.timeout ? AbortSignal.timeout(20000) : undefined;
       const res = await fetch(url, {
         method: 'POST',
         headers,
@@ -111,7 +205,10 @@ async function callGemini({ systemPrompt, prompt, contents, responseJson = false
         if (res.status === 400 || res.status === 401 || res.status === 403) {
           throw new Error(`Gemini Authentication error (${res.status}): ${errText}`);
         }
-        if (res.status === 404) continue;
+        if (res.status === 404 || res.status === 503 || res.status === 429) {
+          console.warn(`[AI Service] Model ${cleanModel} returned ${res.status}, trying next model...`);
+          continue;
+        }
         throw new Error(`Gemini HTTP ${res.status}: ${errText}`);
       }
 
@@ -120,9 +217,11 @@ async function callGemini({ systemPrompt, prompt, contents, responseJson = false
       if (text) return text;
     } catch (err) {
       lastError = err;
-      if (err.name === 'TimeoutError' || err.message.includes('Authentication')) {
+      if (err.message.includes('Authentication')) {
         throw err;
       }
+      console.warn(`[AI Service] Model ${cleanModel} failed (${err.message}), trying next model...`);
+      continue;
     }
   }
   throw lastError || new Error('All candidate Gemini models failed.');
@@ -165,21 +264,46 @@ function parseTerminalHistory(lines) {
   let currentOutput = [];
 
   const linuxPromptRegex = /^([a-zA-Z0-9._-]+)@([a-zA-Z0-9._-]+):([^\r\n$#]*)[$#]\s*(.*)$/;
+  const macZshPromptRegex = /^([a-zA-Z0-9._-]+)@([a-zA-Z0-9._-]+)\s+([^\r\n%]+)%\s*(.*)$/;
   const winPsPromptRegex = /^PS\s+([a-zA-Z]:\\[^>]*?)>\s*(.*)$/;
   const winCmdPromptRegex = /^([a-zA-Z]:\\[^>]*?)>\s*(.*)$/;
-  const barePromptRegex = /^[$#]\s+([a-zA-Z0-9._/-].*)$/;
-  const bareIdlePromptRegex = /^[$#]\s*$/;
+  const barePromptRegex = /^[$#%]\s+([a-zA-Z0-9._/-].*)$/;
+  const bareIdlePromptRegex = /^[$#%]\s*$/;
 
   for (let i = 0; i < cleanLines.length; i++) {
     const line = cleanLines[i] || '';
 
+    const macMatch = line.match(macZshPromptRegex);
     const linuxMatch = line.match(linuxPromptRegex);
     const winPsMatch = line.match(winPsPromptRegex);
     const winCmdMatch = line.match(winCmdPromptRegex);
     const bareMatch = line.match(barePromptRegex);
     const bareIdleMatch = line.match(bareIdlePromptRegex);
 
-    if (linuxMatch) {
+    if (macMatch) {
+      if (currentCmd && !isInternalShellCmd(currentCmd)) {
+        commands.push({
+          command: currentCmd,
+          output: currentOutput,
+          user: activeUser,
+          host: activeHost,
+          cwd: activeDir,
+        });
+      }
+      activeUser = macMatch[1] || 'user';
+      activeHost = macMatch[2] || 'mac-workstation';
+      activeDir = (macMatch[3] || '~').trim();
+      isRemote = false;
+
+      const cmdText = (macMatch[4] || '').trim();
+      if (cmdText && !isInternalShellCmd(cmdText)) {
+        currentCmd = cmdText;
+        currentOutput = [];
+      } else {
+        currentCmd = null;
+        currentOutput = [];
+      }
+    } else if (linuxMatch) {
       if (currentCmd && !isInternalShellCmd(currentCmd)) {
         commands.push({
           command: currentCmd,
@@ -296,7 +420,17 @@ function parseTerminalHistory(lines) {
 /**
  * Conversational pair-programming explanation of terminal buffer (Claude / ChatGPT style)
  */
-function generateSmartTerminalReply({ query = '', lines = [], cwd = '', sessions = [] }) {
+function generateSmartTerminalReply({
+  query = '',
+  lines = [],
+  cwd = '',
+  sessions = [],
+  workspaceRoot = '',
+  openTabs = [],
+  activeFile = null,
+  cwdTree = '',
+  packageInfo = null,
+}) {
   const p = (query || '').toLowerCase().trim();
   const { commands, activeHost, activeUser, activeDir, isRemote: parsedRemote, cleanLines } = parseTerminalHistory(lines);
 
@@ -309,9 +443,22 @@ function generateSmartTerminalReply({ query = '', lines = [], cwd = '', sessions
     ? (activeSess?.ip || (activeHost !== 'local-machine' ? activeHost : 'remote-server'))
     : 'local-machine';
   const user = activeSess?.user || (activeUser !== 'user' ? activeUser : 'user');
-  const dir = activeSess?.cwd || activeDir || cwd || (isRemote ? '~' : 'C:\\Users');
+  const effectiveCwd = inferProjectRoot({ cwd, workspaceRoot, activeFile, openTabs, activeDir });
+  const dir = effectiveCwd || (isRemote ? '~' : resolveExistingPath(process.cwd()));
+  const projectName = path.basename(effectiveCwd) || 'Workspace';
 
   const allText = cleanLines.join('\n');
+
+  // Dynamically obtain directory tree if missing
+  let resolvedTree = cwdTree;
+  let resolvedPackage = packageInfo;
+  if ((!resolvedTree || resolvedTree.length < 5) && effectiveCwd && fs.existsSync(effectiveCwd)) {
+    try {
+      const scanned = scanDirectoryTreeSync(effectiveCwd, 4, 350);
+      resolvedTree = scanned.treeString;
+      if (!resolvedPackage) resolvedPackage = scanned.packageInfo;
+    } catch {}
+  }
 
   // 0. GREETINGS & CASUAL INTERACTION ("hi", "hello", "hey", "who are you", etc.)
   const isGreeting =
@@ -328,9 +475,9 @@ How can I help you today? You can ask me to inspect server status, explain comma
     }
 
     const shellName = activeSess?.shellType === 'powershell' ? 'PowerShell' : 'Command Prompt';
-    return `Hello! I'm THIRD EYE AI, your developer assistant. I'm connected to your local **${shellName}** session in \`${dir}\`.
+    return `Hello! I'm THIRD EYE AI, your developer assistant. I'm connected to your local **${shellName}** session in project **${projectName}** (\`${dir}\`).
 
-How can I help you today? Feel free to ask about your project, run commands, analyze errors, or check system status anytime!`;
+How can I help you today? Feel free to ask about your project, inspect open editor files, run commands, or analyze errors anytime!`;
   }
 
   // 0.1 CONVERSATION STYLE & PERSONA FEEDBACK ("same conversation like with you", "human answer", "human + tech")
@@ -356,19 +503,90 @@ How can I help you today? Feel free to ask about your project, run commands, ana
   2. The exact executable command or code block ready to run.
   3. Actionable context on how it works, caveats, and next steps.
 
-I'm connected to your active terminal in \`${dir}\`${activeSess?.title ? ` (**${activeSess.title}**)` : ''}. Whatever you'd like to dive into—whether it's code, errors, or a design discussion—I'm ready!`;
+I'm connected to your active project **${projectName}** in \`${dir}\`${activeSess?.title ? ` (**${activeSess.title}**)` : ''}. Whatever you'd like to dive into—whether it's code, errors, or a design discussion—I'm ready!`;
   }
 
   // 0.2 CASUAL CHAT & COURTESY
   const isGratitude = /^(?:thanks|thank you|thx|cheers|appreciate it|good job|nice work|awesome|great|perfect|cool|ok|okay|got it|sounds good)[\s!.?]*$/i.test(p);
   if (isGratitude) {
-    return `You're very welcome! I'm here in your terminal workspace whenever you need anything. Feel free to run a command or ask any question!`;
+    return `You're very welcome! I'm here in project **${projectName}** whenever you need anything. Feel free to run a command, ask about code, or inspect files!`;
   }
 
   const isHowAreYou = /^(?:how are you|how's it going|how are things|whats up|what's up)[\s!.?]*$/i.test(p);
   if (isHowAreYou) {
     const shellName = activeSess?.shellType === 'powershell' ? 'PowerShell' : 'Command Prompt';
-    return `Doing great and ready to build with you! Your local **${shellName}** at \`${dir}\` is active and responsive. What are we working on next?`;
+    return `Doing great and ready to build with you! Your local **${shellName}** in project **${projectName}** (\`${dir}\`) is active and responsive. What are we working on next?`;
+  }
+
+  // 0.3 PROJECT IDENTIFICATION & SCOPE
+  const isAskingProject =
+    p.includes('which project') ||
+    p.includes('what project') ||
+    p.includes('in which project') ||
+    p.includes('where are we') ||
+    p.includes('current project') ||
+    p.includes('check in which project') ||
+    p.includes('what folder are we in') ||
+    p.includes('what folder') ||
+    p.includes('which directory') ||
+    p.includes('what directory') ||
+    p.includes('which workspace') ||
+    p.includes('identify project') ||
+    p.includes('check project') ||
+    p.includes('what are we in');
+
+  if (isAskingProject) {
+    const tabsList = Array.isArray(openTabs) && openTabs.length > 0
+      ? openTabs.map((t) => `\`${t.name}\``).join(', ')
+      : (activeFile ? `\`${activeFile.name}\`` : 'None open yet');
+
+    return `You are currently working inside project **${projectName}** at \`${effectiveCwd}\`.
+
+**Active IDE Scope:**
+- **Project Root:** \`${effectiveCwd}\`
+- **Monaco Editor Tabs (${Array.isArray(openTabs) ? openTabs.length : 0}):** ${tabsList}
+${activeFile ? `- **Currently Focused File:** \`${activeFile.name}\` (\`${activeFile.path}\`)` : ''}
+${resolvedPackage ? `- **Project Stack:** ${resolvedPackage.name} (v${resolvedPackage.version || '1.0.0'})` : ''}
+
+Everything in the file explorer, Monaco editor, and terminal sessions is linked to this project scope. What would you like to build, refactor, or test next?`;
+  }
+
+  // 0.4 PROJECT ANALYSIS & COMPONENT DISCOVERY
+  const isAskingAnalysis =
+    p.includes('analyse this project') ||
+    p.includes('analyze this project') ||
+    p.includes('analyse project') ||
+    p.includes('analyze project') ||
+    p.includes('analyse the project') ||
+    p.includes('analyze the project') ||
+    p.includes('inspect this project') ||
+    p.includes('explain this project') ||
+    p.includes('project overview') ||
+    p.includes('architecture of this project') ||
+    p.includes('what does this project do') ||
+    p.includes('what is this project') ||
+    p.includes('analyse this') ||
+    p.includes('analyze this') ||
+    p.includes('what is inside') ||
+    p.includes('whats inside') ||
+    p.includes("what's inside");
+
+  if (isAskingAnalysis) {
+    const tabsList = Array.isArray(openTabs) && openTabs.length > 0
+      ? openTabs.map((t) => `\`${t.name}\``).join(', ')
+      : (activeFile ? `\`${activeFile.name}\`` : 'None');
+
+    return `### **Project Overview & Architecture: ${projectName}**
+
+- **Root Location:** \`${effectiveCwd}\`
+- **Active Open File in Monaco:** ${activeFile ? `\`${activeFile.name}\` (\`${activeFile.path}\`)` : 'None'}
+- **Open Monaco Tabs:** ${tabsList}
+${resolvedPackage ? `- **Stack & Dependencies:** ${resolvedPackage.dependencies ? resolvedPackage.dependencies.slice(0, 8).join(', ') : 'Standard Project'}` : ''}
+
+**Directory Structure:**
+${resolvedTree ? `\`\`\`\n${resolvedTree.slice(0, 1500)}\n\`\`\`` : `Active project scope: \`${effectiveCwd}\``}
+
+What area would you like to inspect or modify?`;
   }
 
   // Telemetry signatures
@@ -555,8 +773,8 @@ top -c
   if (isGitPushBlocked && (isAskingExplanation || p.includes('error') || p.includes('git') || p.includes('push') || p.includes('fix') || p.includes('why') || p.includes('check') || p.includes('terinal') || p.includes('terminal'))) {
     return `GitHub's **Push Protection** blocked your push because an API key was detected in your commit history:
 
-- **Detected Location:** \`Frontend/guide-build-main/src/hooks/useSalesforceWorkspace.ts\` (line 153)
-- **Status:** The hardcoded secret has now been removed from the file.
+- **Detected Location:** Commit history scan
+- **Status:** The hardcoded secret has now been removed.
 
 **How to solve:**
 Amend your commit to replace the old commit in git history, then force push:
@@ -650,12 +868,12 @@ The shell prompt is active and ready for your next command.`;
   }
 
   // 6. Fix / Solve
-  if (p.includes('solve') || p.includes('fix') || p.includes('error') || p.includes('crash') || p.includes('issue') || p.includes('why') || p.includes('check') || p.includes('terinal') || p.includes('terminal')) {
+  if (p.includes('solve') || p.includes('fix') || p.includes('error') || p.includes('crash') || p.includes('issue') || /\b(check\s+(?:error|err|bug|logs?|health|diagnostic|status|issue))\b/i.test(p) || p.includes('why did it fail')) {
     if (isGitPushBlocked) {
       return `GitHub's **Push Protection** blocked your push because an API key was detected in your commit history:
 
-- **Detected Location:** \`Frontend/guide-build-main/src/hooks/useSalesforceWorkspace.ts\` (line 153)
-- **Status:** The hardcoded secret has now been removed from the file.
+- **Detected Location:** Commit history scan
+- **Status:** The hardcoded secret has now been removed.
 
 **How to solve:**
 Amend your commit to replace the old commit in git history, then force push:
@@ -720,7 +938,8 @@ ${isRemote ? 'uptime && df -h' : 'dir'}
 \`\`\``;
     }
 
-    return `No active errors detected in this session. The prompt at \`${dir}\` is ready!`;
+    const readyDir = isRemote ? dir : (effectiveCwd || resolveExistingPath(process.cwd()));
+    return `No active errors detected in this session. The prompt at \`${readyDir}\` is ready!`;
   }
 
   // -------------------------------------------------------------
@@ -730,8 +949,8 @@ ${isRemote ? 'uptime && df -h' : 'dir'}
     if (isGitPushBlocked) {
       return `GitHub's **Push Protection** blocked your push because an API key was detected in your commit history:
 
-- **Detected Location:** \`Frontend/guide-build-main/src/hooks/useSalesforceWorkspace.ts\` (line 153)
-- **Status:** The hardcoded secret has now been removed from the file.
+- **Detected Location:** Commit history scan
+- **Status:** The hardcoded secret has now been removed.
 
 **How to solve:**
 Amend your commit to replace the old commit in git history, then force push:
@@ -824,7 +1043,7 @@ Feel free to ask about committing, branching, or resolving merge conflicts anyti
   if (p.includes('build') || p.includes('dev') || p.includes('npm') || p.includes('start') || p.includes('test') || p.includes('package')) {
     return `Here is how the project workflow is structured for THIRD EYE:
 
-This is a multi-tier workspace consisting of an Electron desktop client, TanStack Start / Vite frontend, and background microservices (PTY on port 4001, AI on port 4002, Salesforce on port 4003).
+This is a multi-tier workspace consisting of an Electron desktop client, TanStack Start / Vite frontend, and background microservices (PTY on port 4001, AI on port 4002).
 
 - **Run all services concurrently in dev mode:**
 \`\`\`sh
@@ -895,19 +1114,16 @@ Replace \`4001\` with whichever port is conflicting!`;
   }
 
   // -------------------------------------------------------------
-  // FLEET & ROBOTICS / SALESFORCE (Human + Tech Combination)
+  // FLEET & ROBOTICS CLUSTER ARCHITECTURE
   // -------------------------------------------------------------
-  if (p.includes('fleet') || p.includes('butler') || p.includes('greyorange') || p.includes('gor') || p.includes('salesforce') || p.includes('ticket') || p.includes('node')) {
-    return `Here is the architecture of your connected Fleet & Salesforce environment:
+  if (p.includes('fleet') || p.includes('butler') || p.includes('greyorange') || p.includes('gor') || p.includes('node')) {
+    return `Here is the architecture of your connected Fleet environment:
 
 - **GreyOrange Butler Robotics Cluster (GOR-FHR-PROD):**
   - **Primary Core:** \`172.28.76.144\` (butler-core-fhrprod) — coordinates robotics dispatch
   - **Database Cluster:** \`172.28.76.145\` (butler-db-cluster-01) — state and event persistence
   - **Worker Nodes:** \`172.28.76.146\` — background task execution
   - **Edge Gateway:** \`172.28.76.150\` — hardware telemetry ingestion
-- **Salesforce Service Cloud Integration:**
-  - Pulls live support cases, priority, customer site details, and matching IP addresses.
-  - Clicking any VM in the left explorer automatically launches an SSH session in a new terminal tab.
 
 You can connect to the primary Butler node anytime with:
 \`\`\`sh
@@ -983,7 +1199,8 @@ Click **Run** on any block to execute it immediately in your terminal!`;
   }
 
   const shellLabel = activeSess?.shellType === 'powershell' ? 'PowerShell' : 'Command Prompt';
-  return `I'm listening and ready to help with your workspace in \`${dir}\`${activeSess?.title ? ` (**${activeSess.title}**)` : ''}!
+  const displayDir = isRemote ? dir : (effectiveCwd || resolveExistingPath(process.cwd()));
+  return `I'm listening and ready to help with your workspace in project **${projectName}** (\`${displayDir}\`)${activeSess?.title ? ` (**${activeSess.title}**)` : ''}!
 
 Feel free to ask any conceptual or technical questions, run commands, or paste errors for diagnosis. What would you like to explore or do next?`;
 }
@@ -1357,6 +1574,127 @@ Strictly respond with a valid JSON object:
   }
 });
 
+const TREE_IGNORE_DIRS = new Set([
+  '.git',
+  'node_modules',
+  '.output',
+  '.wrangler',
+  '.vite',
+  '.next',
+  'dist',
+  'build',
+  '.cache',
+  '.turbo',
+  '.gemini',
+  'coverage',
+  '__pycache__',
+  '.pytest_cache',
+  '.DS_Store',
+]);
+
+function scanDirectoryTreeSync(targetDir, maxDepth = 4, maxEntries = 350) {
+  if (!targetDir || !fs.existsSync(targetDir)) {
+    return { success: false, treeString: '', entries: [], totalFiles: 0, totalDirs: 0 };
+  }
+
+  try {
+    const stat = fs.statSync(targetDir);
+    if (!stat.isDirectory()) {
+      return { success: false, treeString: '', entries: [], totalFiles: 0, totalDirs: 0 };
+    }
+
+    const dirName = path.basename(targetDir) || targetDir;
+    const entries = [];
+    let totalFiles = 0;
+    let totalDirs = 0;
+    let truncated = false;
+
+    function walk(currentDir, currentDepth, prefix) {
+      if (currentDepth > maxDepth || entries.length >= maxEntries) {
+        if (entries.length >= maxEntries) truncated = true;
+        return [];
+      }
+
+      let dirents;
+      try {
+        dirents = fs.readdirSync(currentDir, { withFileTypes: true });
+      } catch {
+        return [];
+      }
+
+      const filtered = dirents.filter((d) => !TREE_IGNORE_DIRS.has(d.name) && !d.name.startsWith('.git'));
+      filtered.sort((a, b) => {
+        if (a.isDirectory() && !b.isDirectory()) return -1;
+        if (!a.isDirectory() && b.isDirectory()) return 1;
+        return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+      });
+
+      const lines = [];
+      for (let i = 0; i < filtered.length; i++) {
+        if (entries.length >= maxEntries) {
+          truncated = true;
+          lines.push(`${prefix}└── ... (additional items truncated)`);
+          break;
+        }
+
+        const d = filtered[i];
+        const isLast = i === filtered.length - 1;
+        const connector = isLast ? '└── ' : '├── ';
+        const childPrefix = prefix + (isLast ? '    ' : '│   ');
+        const fullPath = path.join(currentDir, d.name);
+        const relPath = path.relative(targetDir, fullPath).replace(/\\/g, '/');
+
+        if (d.isDirectory()) {
+          totalDirs++;
+          entries.push({ name: d.name, relativePath: relPath, isDirectory: true });
+          lines.push(`${prefix}${connector}${d.name}/`);
+          const subLines = walk(fullPath, currentDepth + 1, childPrefix);
+          lines.push(...subLines);
+        } else {
+          totalFiles++;
+          entries.push({ name: d.name, relativePath: relPath, isDirectory: false });
+          lines.push(`${prefix}${connector}${d.name}`);
+        }
+      }
+      return lines;
+    }
+
+    const treeLines = [`${dirName}/`, ...walk(targetDir, 1, '')];
+    const treeString = treeLines.join('\n');
+
+    let packageInfo = null;
+    const pkgPath = path.join(targetDir, 'package.json');
+    if (fs.existsSync(pkgPath)) {
+      try {
+        const raw = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+        packageInfo = {
+          name: raw.name || dirName,
+          version: raw.version || '1.0.0',
+          description: raw.description || '',
+          main: raw.main,
+          scripts: Object.keys(raw.scripts || {}),
+          dependencies: Object.keys(raw.dependencies || {}),
+          devDependencies: Object.keys(raw.devDependencies || {}),
+        };
+      } catch {}
+    }
+
+    return {
+      success: true,
+      dir: targetDir,
+      name: dirName,
+      treeString,
+      entries,
+      totalFiles,
+      totalDirs,
+      truncated,
+      packageInfo,
+    };
+  } catch (err) {
+    return { success: false, treeString: '', entries: [], totalFiles: 0, totalDirs: 0 };
+  }
+}
+
 app.post('/api/ai/chat', async (req, res) => {
   const {
     messages = [],
@@ -1364,6 +1702,15 @@ app.post('/api/ai/chat', async (req, res) => {
     recentLines = [],
     cwd = '',
     sessions = [],
+    workspaceRoot = '',
+    workspaceFiles = [],
+    workspaceTree = '',
+    cwdTree = '',
+    cwdEntries = [],
+    cwdPackageInfo = null,
+    activeFile = null,
+    openTabs = [],
+    agentMode = 'autonomous',
   } = req.body;
 
   const mergedLogs = stripAnsi(
@@ -1379,14 +1726,39 @@ app.post('/api/ai/chat', async (req, res) => {
   if (questionMatch && questionMatch[1].trim()) {
     cleanUserQuery = questionMatch[1].trim();
   }
+  // Real-time Filesystem Tree Discovery
+  const activeCwd = inferProjectRoot({ cwd, workspaceRoot, activeFile, openTabs, activeDir: '' });
+  const cwdName = activeCwd ? path.basename(activeCwd) : 'Workspace';
+
+  let effectiveCwdTree = cwdTree;
+  let effectiveCwdEntries = cwdEntries;
+  let effectiveCwdPackage = cwdPackageInfo;
+
+  if ((!effectiveCwdTree || effectiveCwdTree.length < 5) && activeCwd && fs.existsSync(activeCwd)) {
+    const scanned = scanDirectoryTreeSync(activeCwd, 4, 350);
+    effectiveCwdTree = scanned.treeString;
+    effectiveCwdEntries = scanned.entries;
+    effectiveCwdPackage = scanned.packageInfo;
+  }
+
+  let effectiveWsTree = workspaceTree;
+  if (!effectiveWsTree && workspaceRoot && fs.existsSync(workspaceRoot)) {
+    const scanned = scanDirectoryTreeSync(workspaceRoot, 4, 350);
+    effectiveWsTree = scanned.treeString;
+  }
 
   // If no cloud LLM configured, immediately return conversational smart reply
   if (!geminiKey && !openAiClient) {
     const reply = generateSmartTerminalReply({
       query: cleanUserQuery,
       lines: mergedLogs ? mergedLogs.split(/\r?\n/) : [],
-      cwd,
+      cwd: activeCwd,
       sessions,
+      workspaceRoot,
+      openTabs,
+      activeFile,
+      cwdTree: effectiveCwdTree,
+      packageInfo: effectiveCwdPackage,
     });
     return res.json({
       success: true,
@@ -1395,39 +1767,147 @@ app.post('/api/ai/chat', async (req, res) => {
     });
   }
 
+  let cwdScopeSection = `\n================================================================================\n1. ACTIVE WORKING DIRECTORY FILESYSTEM SCOPE\n================================================================================\n` +
+    `Directory Path: ${activeCwd}\n` +
+    `Folder Name: ${cwdName}\n`;
+
+  if (effectiveCwdPackage) {
+    cwdScopeSection += `Project Manifest: ${effectiveCwdPackage.name || cwdName} (v${effectiveCwdPackage.version || '1.0.0'})` +
+      (effectiveCwdPackage.description ? `\nDescription: ${effectiveCwdPackage.description}` : '') +
+      (effectiveCwdPackage.scripts && effectiveCwdPackage.scripts.length > 0 ? `\nAvailable Scripts: ${effectiveCwdPackage.scripts.join(', ')}` : '') +
+      (effectiveCwdPackage.dependencies && effectiveCwdPackage.dependencies.length > 0 ? `\nDependencies: ${effectiveCwdPackage.dependencies.slice(0, 20).join(', ')}` : '') + '\n';
+  }
+
+  if (effectiveCwdTree) {
+    cwdScopeSection += `\nComplete Directory Tree of "${cwdName}":\n${effectiveCwdTree}\n`;
+  } else if (Array.isArray(effectiveCwdEntries) && effectiveCwdEntries.length > 0) {
+    cwdScopeSection += `\nFiles & Folders in "${cwdName}":\n` +
+      effectiveCwdEntries.map(e => `${e.isDirectory ? '[dir]' : '[file]'} ${e.relativePath || e.name}`).join('\n') + '\n';
+  }
+
+  let wsScopeSection = '';
+  if (workspaceRoot && workspaceRoot !== activeCwd) {
+    wsScopeSection = `\n================================================================================\n2. ROOT WORKSPACE PROJECT SCOPE\n================================================================================\n` +
+      `Workspace Root: ${workspaceRoot}\n` +
+      (effectiveWsTree ? `Root Filesystem Tree:\n${effectiveWsTree}\n` : `Root Files: ${(workspaceFiles || []).slice(0, 50).join(', ')}\n`);
+  }
+
+  // Monaco Code Editor Tabs Context
+  let monacoTabsSection = '';
+  if (Array.isArray(openTabs) && openTabs.length > 0) {
+    monacoTabsSection = `\n================================================================================\n3. MONACO CODE EDITOR: ALL OPEN TABS & BUFFER CONTENTS (${openTabs.length} open tabs)\n================================================================================\n` +
+      openTabs.map((tab, idx) => {
+        const isCurrent = tab.isActive || (activeFile && (activeFile.path === tab.path || activeFile.name === tab.name));
+        const cursor = tab.cursorPosition ? ` | Cursor Line ${tab.cursorPosition.lineNumber}, Col ${tab.cursorPosition.column}` : '';
+        const status = tab.isDirty ? 'UNSAVED EDITS IN BUFFER' : 'SAVED TO DISK';
+        const snippet = tab.contentSnippet || tab.content || '(empty)';
+        return `Tab [${idx + 1}]: ${isCurrent ? '>>> [CURRENT ACTIVE TAB] <<< ' : ''}"${tab.name}"\n` +
+          `File Path: ${tab.path}\n` +
+          `Language: ${tab.language || 'plaintext'} | Buffer Status: ${status}${cursor}\n` +
+          `Code Content:\n\`\`\`${tab.language || ''}\n${snippet}\n\`\`\``;
+      }).join('\n\n') + '\n';
+  } else if (activeFile) {
+    monacoTabsSection = `\n================================================================================\n3. MONACO CODE EDITOR: ACTIVE FILE BUFFER\n================================================================================\n` +
+      `Active File: "${activeFile.name}" (${activeFile.path})\n` +
+      `Language: ${activeFile.language || 'plaintext'} | Buffer Status: ${activeFile.isDirty ? 'Unsaved Edits' : 'Saved'}\n` +
+      `Code Content:\n\`\`\`${activeFile.language || ''}\n${activeFile.content ? activeFile.content.slice(0, 6000) : '(empty)'}\n\`\`\`\n`;
+  } else {
+    monacoTabsSection = `\n================================================================================\n3. MONACO CODE EDITOR\n================================================================================\n(No editor tabs currently open)\n`;
+  }
+
+  let agentRoleInstructions = '';
+  if (agentMode === 'editor') {
+    agentRoleInstructions = `
+YOU ARE IN MONACO EDITOR AGENT MODE:
+Your focus is analyzing, refactoring, and modifying code in Monaco editor.
+Active open file: ${activeFile ? `"${activeFile.name}" (${activeFile.path})` : 'None open yet'}.
+Provide complete, drop-in replacement code in standard code blocks so the user can use "Apply to Monaco".
+If you need to create a new file or open an existing file, you can output an action block:
+\`\`\`action
+{"action": "createFile", "path": "relativePath", "content": "file contents..."}
+\`\`\`
+\`\`\`action
+{"action": "openFile", "path": "relativePath"}
+\`\`\`
+`;
+  } else if (agentMode === 'terminal') {
+    agentRoleInstructions = `
+YOU ARE IN TERMINAL DEBUGGER AGENT MODE:
+Your focus is monitoring terminal commands, diagnosing runtime errors, stack traces, and fixing issues in the shell.
+Always provide plain-English root cause analysis and clean executable code blocks (\`\`\`sh ... \`\`\`) that the user can run with 1-click in the terminal.
+`;
+  } else {
+    // Autonomous Mode
+    agentRoleInstructions = `
+YOU ARE IN FULL AUTONOMOUS AGENT MODE (Third Eye Agent):
+You have direct tools and authority to perform file and directory operations in the user's workspace.
+When you want to create a file, edit/write to a file, create a directory, open a file in Monaco editor, or execute a command, include structured JSON action blocks in your output:
+\`\`\`action
+{"action": "createFile", "path": "relativePath", "content": "file contents..."}
+\`\`\`
+\`\`\`action
+{"action": "writeFile", "path": "relativePath", "content": "updated full content..."}
+\`\`\`
+\`\`\`action
+{"action": "createDirectory", "path": "relativePath"}
+\`\`\`
+\`\`\`action
+{"action": "openFile", "path": "relativePath"}
+\`\`\`
+\`\`\`action
+{"action": "executeCommand", "command": "command to run"}
+\`\`\`
+\`\`\`action
+{"action": "switchWorkspace", "path": "relativePathOrAbsolutePath"}
+\`\`\`
+The application will automatically execute these action blocks, update the Monaco editor, update the workspace filesystem, and show live progress accordions.
+Always accompany actions with clear, friendly pair-programming explanation.
+`;
+  }
+
   const sessionsOverview = Array.isArray(sessions) && sessions.length > 0
     ? `\n\nAll Active Workspace Terminal Tabs (${sessions.length} open sessions):\n` +
       sessions.map((s, idx) => `[Tab ${idx + 1}: "${s.title}" (${s.isRemote ? `Remote VM: ${s.ip || s.user || 'SSH'}` : 'Local Workstation'})]${s.isFocused ? ' [CURRENT FOCUS]' : ''}\nWorking Path: ${s.cwd}\nRecent buffer (${(s.recentLines || []).length} lines):\n${(s.recentLines || []).slice(-35).join('\n') || '(prompt ready)'}`).join('\n\n')
     : '';
 
-  const systemPrompt = `You are THIRD EYE AI, an intelligent, conversational AI developer assistant embedded inside the user's terminal workspace (similar to Claude, ChatGPT, or Antigravity).
-You have real-time visibility into all active terminal tabs, command outputs, and project files.
-
+  const systemPrompt = `You are THIRD EYE AI, an intelligent, conversational agentic AI developer assistant embedded inside the user's terminal workspace and Monaco code editor.
+You have real-time visibility and full context across all active terminal tabs, the complete project filesystem tree, and all open Monaco code editor tabs.
+${agentRoleInstructions}
+${cwdScopeSection}${wsScopeSection}${monacoTabsSection}
 CURRENT ACTIVE TERMINAL SCREEN & LIVE BUFFER:
 \`\`\`terminal
 ${mergedLogs.slice(-6000) || '(Terminal buffer ready / awaiting input)'}
 \`\`\`
 
+CRITICAL ENVIRONMENT AWARENESS & DIRECT BEHAVIOR RULES:
+1. FULL DIRECTORY AND FILESYSTEM KNOWLEDGE (HIGHEST PRIORITY):
+   You have DIRECT, REAL-TIME VISIBILITY into the filesystem tree and all directory contents provided above for both the active working directory (${activeCwd}) and workspace root (${workspaceRoot || activeCwd}).
+   - When the user asks "tell me what's inside it?", "what is in this folder?", "what files do I have?", "what does this project do?", or asks about folder structure:
+     >>> NEVER TELL THE USER TO RUN "ls", "ls -la", "dir", OR "find" IN THE TERMINAL! <<<
+     The user is asking YOU because you are their pair programmer with direct environment knowledge. Immediately inspect the provided DIRECTORY TREE above, and directly list, categorize, and explain the files, folders, architecture, scripts, and purpose of the directory!
+
+2. COMPLETE MONACO EDITOR VISIBILITY (HIGHEST PRIORITY):
+   You have DIRECT visibility into ALL open tabs in the Monaco code editor, their file paths, dirty (unsaved) status, and their full code buffers.
+   - When the user asks about open files, unsaved changes, code in tabs, or asks to refactor/inspect code, directly cite the tab name, file path, and reference lines or contents from the open Monaco tabs.
+
+3. DYNAMIC ENVIRONMENT SYNC:
+   Notice that the terminal working directory is ${activeCwd}. If the user navigated into a subfolder or subproject (e.g. ${path.basename(activeCwd) || 'current folder'}), your primary scope for folder contents is that active directory.
+
 CONVERSATION & ASSISTANCE PROTOCOL:
 You adapt seamlessly between two interaction modes based on what the user needs:
 
 1. HUMAN CONVERSATIONAL MODE:
-- When the user asks casual, general, conceptual, feedback, or conversational questions (e.g. "hi", "how are you?", "can we talk like humans?", "what do you think?", "who are you?", "thanks for your help", general thoughts):
+- When the user asks casual, general, conceptual, feedback, or conversational questions (e.g. "hi", "how are you?", "can we talk like humans?", "what do you think?", "who are you?", "thanks for your help"):
   - Answer naturally, conversationally, warmly, and thoughtfully—just like an experienced software engineer pair-programming with the user.
-  - Do NOT dump terminal diagnostics, do NOT print robotic checklists, and do NOT recite terminal status headers when having a conversational dialogue.
+  - Do NOT dump terminal diagnostics, checklists, or robotic templates.
 
 2. TECHNICAL ASSISTANCE MODE (HUMAN + TECH COMBINATION):
-- When the user asks for technical help, commands, troubleshooting, code explanation, or system tasks:
-  Always fabricate a balanced, high-value human + tech combination:
-  a) Human Explanation: Conversational, plain-English understanding of what's happening or why it occurs, friendly and clear.
-  b) Technical Execution: Clean, executable markdown code block (\`\`\`sh ... \`\`\` or \`\`\`powershell ... \`\`\`) with exact command(s).
-  c) Proactive Guidance / Next Steps: Actionable tips on what to expect, verify, or watch out for.
+- When the user asks for technical help, code changes, or system tasks:
+  Provide clear explanation, executable code/action blocks, and actionable next steps.
 
 Context Awareness:
-- If the user is inside a remote VM / SSH session (e.g. prompt like user@host:~$ or ssh session), analyze their remote Linux VM, processes, services, and paths. Do NOT confuse the remote VM with the local machine.
-- If the user is on their local workstation, analyze their local workspace and files.
-- Never output raw system emojis (no emoji icons). Keep markdown formatting crisp, engaging, and readable.
-- Formatting Hygiene: Keep output clean and modern. Avoid using raw markdown hash headers (do not use #### or #####). Use bold section headings (e.g. **Section Title:**) and clean bullet points instead.
+- Always reference relative project file paths accurately.
+- Formatting Hygiene: Use bold section headings (e.g. **Section Title:**) and clean bullet points.
 ${sessionsOverview}`;
 
   if (geminiKey) {
@@ -1454,6 +1934,7 @@ ${sessionsOverview}`;
       }
 
       const reply = await callGemini({
+        apiKey: geminiKey,
         systemPrompt,
         contents: formattedContents,
         responseJson: false,
@@ -1479,8 +1960,13 @@ ${sessionsOverview}`;
         const reply = generateSmartTerminalReply({
           query: cleanUserQuery,
           lines: mergedLogs ? mergedLogs.split(/\r?\n/) : [],
-          cwd,
+          cwd: activeCwd,
           sessions,
+          workspaceRoot,
+          openTabs,
+          activeFile,
+          cwdTree: effectiveCwdTree,
+          packageInfo: effectiveCwdPackage,
         });
         return res.json({
           success: true,
@@ -1519,8 +2005,13 @@ ${sessionsOverview}`;
       const reply = generateSmartTerminalReply({
         query: cleanUserQuery,
         lines: mergedLogs ? mergedLogs.split(/\r?\n/) : [],
-        cwd,
+        cwd: activeCwd,
         sessions,
+        workspaceRoot,
+        openTabs,
+        activeFile,
+        cwdTree: effectiveCwdTree,
+        packageInfo: effectiveCwdPackage,
       });
       return res.json({
         success: true,
@@ -1531,6 +2022,411 @@ ${sessionsOverview}`;
   }
 });
 
+app.get('/api/ai/status', (req, res) => {
+  reloadEnvIfNeeded();
+  const geminiKey = getGeminiApiKey();
+  const openAiClient = getOpenAIClient();
+  return res.json({
+    success: true,
+    hasGeminiKey: Boolean(geminiKey),
+    hasOpenAiKey: Boolean(openAiClient),
+    activeProvider: geminiKey ? 'gemini' : openAiClient ? 'openai' : 'none',
+    models: ['gemini-3.1-flash-lite-preview', 'gemini-3-flash-preview', 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'],
+  });
+});
+
+app.post('/api/ai/save-key', async (req, res) => {
+  const { apiKey } = req.body;
+  if (!apiKey || typeof apiKey !== 'string' || apiKey.trim() === '') {
+    return res.status(400).json({ success: false, error: 'API key is required' });
+  }
+  const cleanKey = apiKey.trim();
+  try {
+    const envPath = path.join(__dirname, '../../.env');
+    let envContent = '';
+    if (fs.existsSync(envPath)) {
+      envContent = fs.readFileSync(envPath, 'utf8');
+    }
+    const isGemini = cleanKey.startsWith('AIzaSy') || !cleanKey.startsWith('sk-');
+    if (isGemini) {
+      if (/^GEMINI_API_KEY=/m.test(envContent)) {
+        envContent = envContent.replace(/^GEMINI_API_KEY=.*$/m, `GEMINI_API_KEY=${cleanKey}`);
+      } else {
+        envContent += `\nGEMINI_API_KEY=${cleanKey}\n`;
+      }
+      process.env.GEMINI_API_KEY = cleanKey;
+    } else {
+      if (/^OPENAI_API_KEY=/m.test(envContent)) {
+        envContent = envContent.replace(/^OPENAI_API_KEY=.*$/m, `OPENAI_API_KEY=${cleanKey}`);
+      } else {
+        envContent += `\nOPENAI_API_KEY=${cleanKey}\n`;
+      }
+      process.env.OPENAI_API_KEY = cleanKey;
+    }
+    fs.writeFileSync(envPath, envContent, 'utf8');
+    return res.json({ success: true, message: 'API Key successfully configured in .env and active!' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ==========================================================================
+// AUTONOMOUS AGENT LOOP ENDPOINTS (Phase 4 & Phase 5)
+// ==========================================================================
+let AgentLoopClass = null;
+let RepoMapClass = null;
+let HybridRetrieverClass = null;
+let ContextBudgetManagerClass = null;
+let compactTurnsFn = null;
+let permissionPolicyEngine = null;
+
+try {
+  const loopMod = require('./dist/loop');
+  const repoMod = require('./dist/context/repoMap');
+  const retMod = require('./dist/context/retriever');
+  const bgtMod = require('./dist/context/budgetManager');
+  const cmpMod = require('./dist/context/compaction');
+  const prmMod = require('./dist/tools/permissions');
+
+  AgentLoopClass = loopMod.AgentLoop;
+  RepoMapClass = repoMod.RepoMap;
+  HybridRetrieverClass = retMod.HybridRetriever;
+  ContextBudgetManagerClass = bgtMod.ContextBudgetManager;
+  compactTurnsFn = cmpMod.compactConversationHistory;
+  permissionPolicyEngine = prmMod.permissionPolicy;
+} catch (e) {
+  console.warn('[AI Service] dist modules not yet built:', e.message);
+}
+
+let AgentRouterClass = null;
+let SkillManagerClass = null;
+
+try {
+  const agentMod = require('./dist/agents');
+  AgentRouterClass = agentMod.AgentRouter;
+  const skillMod = require('./dist/skills/skillManager');
+  SkillManagerClass = skillMod.SkillManager;
+} catch (e) {
+  console.warn('[AI Service] agents/skills modules not yet built:', e.message);
+}
+
+let defaultWorkspace = path.resolve(__dirname, '../..');
+let repoMapInstance = RepoMapClass ? new RepoMapClass(defaultWorkspace) : null;
+let hybridRetrieverInstance = (repoMapInstance && HybridRetrieverClass) ? new HybridRetrieverClass(repoMapInstance) : null;
+let agentLoopInstance = AgentLoopClass ? new AgentLoopClass(defaultWorkspace) : null;
+let agentRouterInstance = AgentRouterClass ? new AgentRouterClass(defaultWorkspace) : null;
+let skillManagerInstance = SkillManagerClass ? new SkillManagerClass(defaultWorkspace) : null;
+
+let getActiveRunningTasksSummary = null;
+let executeStopServer = null;
+try {
+  const termMod = require('./dist/tools/runTerminal');
+  getActiveRunningTasksSummary = termMod.getActiveRunningTasksSummary;
+  executeStopServer = termMod.executeStopServer;
+} catch (e) {}
+
+// Get active running tasks and ports
+app.get('/api/ai/server/running-tasks', (req, res) => {
+  if (getActiveRunningTasksSummary) {
+    return res.json({ success: true, summary: getActiveRunningTasksSummary() });
+  }
+  return res.json({ success: true, summary: 'No active background tasks or server processes running.' });
+});
+
+// Explicit stop server endpoint
+app.post('/api/ai/server/stop', async (req, res) => {
+  try {
+    if (executeStopServer) {
+      const result = await executeStopServer(req.body);
+      return res.json(result);
+    }
+    return res.status(500).json({ error: 'runTerminal tool not initialized' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// Get available skills
+app.get('/api/ai/skills', (req, res) => {
+  const ws = req.query.workspaceRoot || defaultWorkspace;
+  if (!skillManagerInstance && SkillManagerClass) {
+    skillManagerInstance = new SkillManagerClass(ws);
+  }
+  if (skillManagerInstance) {
+    skillManagerInstance.setWorkspaceRoot(ws);
+    const skills = skillManagerInstance.loadSkills();
+    return res.json({ success: true, count: skills.length, skills });
+  }
+  return res.json({ success: true, count: 0, skills: [] });
+});
+
+// SSE Streaming Autonomous Agent Endpoint
+app.post('/api/ai/agent/stream', async (req, res) => {
+  const {
+    messages = [],
+    sessionId = `session-${Date.now()}`,
+    workspaceRoot = defaultWorkspace,
+    openTabs = [],
+    terminalTail = '',
+    model,
+    context_v2 = true,
+    agentMode = 'autonomous',
+    activeFile = null,
+  } = req.body || {};
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
+  const sendEvent = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    if (agentRouterInstance) {
+      agentRouterInstance.setWorkspaceRoot(workspaceRoot);
+      const lastMsg = messages[messages.length - 1];
+      const userPrompt = lastMsg?.role === 'user' ? lastMsg.content : (req.body.prompt || '');
+
+      await agentRouterInstance.execute(
+        userPrompt,
+        {
+          workspaceRoot,
+          sessionId,
+          openTabs,
+          terminalTail,
+          activeFile,
+          history: messages.slice(0, -1),
+          agentMode,
+          model,
+          apiKey: getGeminiApiKey() || undefined,
+        },
+        (event) => {
+          sendEvent(event.type, { ...event.data, sessionId: event.sessionId });
+        }
+      );
+
+      res.end();
+      return;
+    }
+
+    if (!agentLoopInstance) {
+      throw new Error('AgentLoop not initialized. Run tsc build first.');
+    }
+
+    agentLoopInstance.setWorkspaceRoot(workspaceRoot);
+    if (context_v2 && repoMapInstance) {
+      repoMapInstance.setWorkspaceRoot(workspaceRoot);
+    }
+
+    const lastMsg = messages[messages.length - 1];
+    const userPrompt = lastMsg?.role === 'user' ? lastMsg.content : '';
+
+    // Hybrid retrieval
+    let relevantChunks = [];
+    if (context_v2 && hybridRetrieverInstance && userPrompt) {
+      relevantChunks = await hybridRetrieverInstance.retrieveRelevantChunks({
+        userQuery: userPrompt,
+        workspaceRoot,
+        openTabs,
+        maxChunks: 4,
+      });
+    }
+
+    const repoSummary = (context_v2 && repoMapInstance) ? repoMapInstance.getRepoMapSummary(50) : '';
+    const chunkText = relevantChunks
+      .map((c) => `--- File: ${c.filePath} (lines ${c.startLine}-${c.endLine}) ---\n${c.content}`)
+      .join('\n\n');
+
+    let skillsPromptText = '';
+    if (skillManagerInstance) {
+      skillManagerInstance.setWorkspaceRoot(workspaceRoot);
+      const matched = skillManagerInstance.matchSkills(userPrompt, 3);
+      if (
+        matched.length === 0 &&
+        (userPrompt.toLowerCase().includes('website') ||
+         userPrompt.toLowerCase().includes('project') ||
+         userPrompt.toLowerCase().includes('app') ||
+         userPrompt.toLowerCase().includes('build') ||
+         userPrompt.toLowerCase().includes('create') ||
+         userPrompt.toLowerCase().includes('design'))
+      ) {
+        const defaultWeb = skillManagerInstance.getSkill('web-app-architecture');
+        const defaultDesign = skillManagerInstance.getSkill('frontend-design');
+        if (defaultWeb) matched.push(defaultWeb);
+        if (defaultDesign) matched.push(defaultDesign);
+      }
+      skillsPromptText = skillManagerInstance.formatSkillsPrompt(matched);
+    }
+
+    const systemPrompt = `You are THIRD_EYE, a world-class autonomous AI coding agent designed to outperform Cursor, Claude Code, and Antigravity.
+You are operating strictly within the workspace root: ${workspaceRoot} (project name: ${path.basename(workspaceRoot)}).
+You have direct tool access to read, write, edit, search files, inspect directories, and run terminal commands.
+Always use tools (such as listDir, readFile, searchCode) to deeply inspect the workspace structure and existing file states before writing code.
+ZERO PLACEHOLDERS & NO EMPTY FILES: Never output empty files, stub functions, or "// TODO" placeholders. Every file must be a complete, robust, full-featured production implementation.
+RICH AESTHETICS & MODERN UI: For web and frontend projects, produce visually stunning, modern designs (Tailwind/CSS, curated color palettes, Google Fonts like Inter/Outfit, smooth micro-animations, glassmorphism, rich mock datasets with Unsplash images). Never output raw unstyled HTML.
+POLYGLOT EXCELLENCE: Support any language and framework with idiomatic best practices, clean modular architecture, and zero syntax errors.
+When modifying code: every write or edit produces a reviewable diff for the developer.
+Workspace Root: ${workspaceRoot}
+${skillsPromptText ? `\n${skillsPromptText}\n` : ''}
+${repoSummary ? `\nWorkspace Repo Map:\n${repoSummary}\n` : ''}
+${chunkText ? `\nRelevant Code Chunks:\n${chunkText}\n` : ''}
+${terminalTail ? `\nRecent Terminal State:\n${terminalTail}\n` : ''}`;
+
+    // Compact history if needed
+    const turns = messages.slice(0, -1);
+    const compactedTurns = (context_v2 && compactTurnsFn) ? compactTurnsFn(turns, 10) : turns;
+
+    const result = await agentLoopInstance.run({
+      userMessage: userPrompt,
+      workspaceRoot,
+      sessionId,
+      model,
+      envelope: {
+        systemPrompt,
+        repoMapSummary: repoSummary,
+        openTabs,
+        terminalTail,
+        history: compactedTurns,
+      },
+      onDelta: (delta) => {
+        sendEvent('delta', { delta, sessionId });
+      },
+      onToolCall: (tc) => {
+        sendEvent('tool_call', { toolCall: tc, sessionId });
+      },
+      onToolResult: (tr) => {
+        sendEvent('tool_result', { toolResult: tr, sessionId });
+      },
+      onStatus: (status) => {
+        sendEvent('status', { status, sessionId });
+      },
+      onPermissionRequest: async (permReq) => {
+        sendEvent('permission_request', { ...permReq, sessionId });
+        return new Promise((resolve) => {
+          permissionPolicyEngine?.registerPendingPrompt(permReq.id, (decision) => {
+            resolve(decision);
+          });
+        });
+      },
+    });
+
+    sendEvent('finish', { reply: result.reply, iterations: result.iterations, sessionId });
+    res.end();
+  } catch (err) {
+    sendEvent('error', { error: err.message, sessionId });
+    res.end();
+  }
+});
+
+// Permission Decision Callback
+app.post('/api/ai/agent/permission_decision', (req, res) => {
+  const { requestId, decision, command } = req.body || {};
+  if (!requestId || !decision) {
+    return res.status(400).json({ error: 'Missing requestId or decision' });
+  }
+  permissionPolicyEngine?.resolveDecision(requestId, decision, command);
+  res.json({ success: true });
+});
+
+// Checkpoints
+app.get('/api/ai/agent/checkpoints', (req, res) => {
+  if (agentLoopInstance) {
+    res.json(agentLoopInstance['toolRegistry'].getCheckpointManager().listCheckpoints());
+  } else {
+    res.json([]);
+  }
+});
+
+app.post('/api/ai/agent/revert_checkpoint', async (req, res) => {
+  const { checkpointId } = req.body || {};
+  if (!checkpointId) return res.status(400).json({ error: 'Missing checkpointId' });
+  const cm = agentLoopInstance?.['toolRegistry']?.getCheckpointManager() ||
+    agentRouterInstance?.['autonomousAgent']?.['orchestrator']?.['workerPool']?.['loop']?.getToolRegistry()?.getCheckpointManager();
+  if (cm) {
+    const result = await cm.revertCheckpoint(checkpointId);
+    res.json(result);
+  } else {
+    res.status(500).json({ error: 'CheckpointManager not initialized' });
+  }
+});
+
+// Emergency Stop / Kill Switch
+app.post('/api/ai/agent/stop', (req, res) => {
+  const { sessionId } = req.body || {};
+  try {
+    if (sessionId) {
+      agentRouterInstance?.['autonomousAgent']?.cancel(sessionId);
+      agentLoopInstance?.cancel?.(sessionId);
+    }
+    res.json({ success: true, message: `Stopped session ${sessionId || 'all'}` });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Revert all checkpoints created in session
+app.post('/api/ai/agent/revert_session', async (req, res) => {
+  try {
+    const cm = agentLoopInstance?.['toolRegistry']?.getCheckpointManager() ||
+      agentRouterInstance?.['autonomousAgent']?.['orchestrator']?.['workerPool']?.['loop']?.getToolRegistry()?.getCheckpointManager();
+    if (!cm) return res.status(500).json({ error: 'CheckpointManager not available' });
+
+    const checkpoints = cm.listCheckpoints();
+    const allReverted = new Set();
+    for (const cp of checkpoints) {
+      const r = await cm.revertCheckpoint(cp.id);
+      for (const f of r.revertedFiles) allReverted.add(f);
+    }
+    res.json({ success: true, revertedFiles: Array.from(allReverted) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Running background terminal tasks count
+app.get('/api/ai/agent/background_tasks', (req, res) => {
+  try {
+    const registry = agentLoopInstance?.['toolRegistry'] ||
+      agentRouterInstance?.['autonomousAgent']?.['orchestrator']?.['workerPool']?.['loop']?.getToolRegistry();
+    const tasks = registry ? registry.getRunningTasks?.() || [] : [];
+    res.json({ count: tasks.length, tasks });
+  } catch {
+    res.json({ count: 0, tasks: [] });
+  }
+});
+
+// Antigravity Reviewable Artifacts endpoints
+app.get('/api/ai/agent/artifacts', (req, res) => {
+  try {
+    const sessionId = req.query.sessionId;
+    if (!sessionId) return res.status(400).json({ error: 'sessionId required' });
+    const artMgr = agentRouterInstance?.getAutonomousAgent?.()?.getOrchestrator?.()?.getArtifactManager();
+    if (!artMgr) return res.json({ success: true, count: 0, artifacts: [] });
+    const artifacts = artMgr.getAllArtifacts(sessionId);
+    res.json({ success: true, count: artifacts.length, artifacts });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/ai/agent/artifacts/feedback', (req, res) => {
+  try {
+    const { sessionId, artifactId, comment, author = 'user' } = req.body || {};
+    if (!sessionId || !artifactId || !comment) {
+      return res.status(400).json({ error: 'sessionId, artifactId, and comment required' });
+    }
+    const artMgr = agentRouterInstance?.getAutonomousAgent?.()?.getOrchestrator?.()?.getArtifactManager();
+    if (!artMgr) return res.status(500).json({ error: 'ArtifactManager not initialized' });
+    const updated = artMgr.addFeedback(sessionId, artifactId, comment, author);
+    res.json({ success: true, artifact: updated });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.listen(PORT, () => {
   console.log(`[THIRD EYE Dedicated Enterprise AI Service] Running on http://localhost:${PORT}`);
+  console.log(`[THIRD EYE Dedicated Enterprise AI Service] Autonomous Agent Loop and Context_v2 Engine active`);
 });
+

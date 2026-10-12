@@ -4,6 +4,7 @@
   "description": "THIRD EYE - Pseudo-Terminal Microservice",
   "main": "server.js",
   "scripts": {
+    "build": "tsc",
     "start": "node server.js"
   },
   "dependencies": {

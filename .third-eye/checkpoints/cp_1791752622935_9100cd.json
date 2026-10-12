@@ -1,0 +1,12 @@
+{
+  "id": "cp_1791752622935_9100cd",
+  "timestamp": 1791752622936,
+  "description": "Pre-mutation snapshot: create_dir milkshake-site",
+  "files": {
+    "/Users/adityasalgotra/Downloads/THIRD_EYE/Frontend/milkshake-site": {
+      "path": "/Users/adityasalgotra/Downloads/THIRD_EYE/Frontend/milkshake-site",
+      "hash": "new-file",
+      "content": ""
+    }
+  }
+}

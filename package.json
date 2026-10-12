@@ -5,20 +5,23 @@
   "main": "electron/main.js",
   "private": true,
   "workspaces": [
+    "packages/*",
     "Frontend/guide-build-main",
-    "backend/*"
+    "backend/pty-service",
+    "backend/ai-service"
   ],
   "scripts": {
     "start": "electron .",
-    "dev": "concurrently -k -n \"PTY-SVC,AI-SVC,SF-SVC,FRONTEND,ELECTRON\" -c \"blue,green,yellow,magenta,cyan\" \"npm --prefix backend/pty-service run start\" \"npm --prefix backend/ai-service run start\" \"npm --prefix backend/salesforce-service run start\" \"npm --prefix Frontend/guide-build-main run dev\" \"electron .\"",
-    "dev:full": "concurrently -k -n \"PTY-SVC,AI-SVC,SF-SVC,FRONTEND,ELECTRON\" -c \"blue,green,yellow,magenta,cyan\" \"npm --prefix backend/pty-service run start\" \"npm --prefix backend/ai-service run start\" \"npm --prefix backend/salesforce-service run start\" \"npm --prefix Frontend/guide-build-main run dev\" \"electron .\"",
+    "build:shared": "npm --prefix packages/shared run build",
+    "smoke": "node scripts/smoke-test.js",
+    "dev": "concurrently -k -n \"PTY-SVC,AI-SVC,FRONTEND,ELECTRON\" -c \"blue,green,magenta,cyan\" \"npm --prefix backend/pty-service run start\" \"npm --prefix backend/ai-service run start\" \"npm --prefix Frontend/guide-build-main run dev\" \"wait-on tcp:3000 && electron .\"",
+    "dev:full": "concurrently -k -n \"PTY-SVC,AI-SVC,FRONTEND,ELECTRON\" -c \"blue,green,magenta,cyan\" \"npm --prefix backend/pty-service run start\" \"npm --prefix backend/ai-service run start\" \"npm --prefix Frontend/guide-build-main run dev\" \"wait-on tcp:3000 && electron .\"",
     "dev:frontend": "npm --prefix Frontend/guide-build-main run dev",
     "dev:electron": "electron .",
-    "dev:backend": "concurrently -k -n \"PTY,AI,SF\" -c \"blue,green,yellow\" \"npm --prefix backend/pty-service run start\" \"npm --prefix backend/ai-service run start\" \"npm --prefix backend/salesforce-service run start\"",
-    "dev:salesforce": "npm --prefix backend/salesforce-service run start",
+    "dev:backend": "concurrently -k -n \"PTY,AI\" -c \"blue,green\" \"npm --prefix backend/pty-service run start\" \"npm --prefix backend/ai-service run start\"",
     "build:frontend": "npm --prefix Frontend/guide-build-main run build",
     "build:electron": "electron-builder",
-    "build": "npm run build:frontend && npm run build:electron",
+    "build": "npm run build:shared && npm run build:frontend && npm run build:electron",
     "rebuild": "electron-rebuild -f -w node-pty",
     "postinstall": "node -e \"console.log('Dependencies verified')\""
   },

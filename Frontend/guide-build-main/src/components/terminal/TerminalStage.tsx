@@ -18,16 +18,13 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { TerminalApi } from "@/hooks/useTerminalSession";
-import type { SalesforceWorkspaceApi } from "@/hooks/useSalesforceWorkspace";
 import { XtermView } from "./XtermView";
 
 export function TerminalStage({
   api,
-  sfApi,
   onNew,
 }: {
   api: TerminalApi;
-  sfApi?: SalesforceWorkspaceApi;
   onNew: () => void;
 }) {
   const s = api.active;
@@ -60,11 +57,15 @@ export function TerminalStage({
         if (typeof z === 'number') setZoomLevel(Math.round(z * 100));
       });
     }
+    let unsub: (() => void) | undefined;
     if (window.electronAPI?.window?.onZoomChanged) {
-      return window.electronAPI.window.onZoomChanged((z: number) => {
+      unsub = window.electronAPI.window.onZoomChanged((z: number) => {
         if (typeof z === 'number') setZoomLevel(Math.round(z * 100));
       });
     }
+    return () => {
+      unsub?.();
+    };
   }, []);
 
   const handleZoomIn = () => {
@@ -275,54 +276,7 @@ export function TerminalStage({
         )}
       </div>
 
-      {/* GreyOrange Site Cluster Node Fleet Bar */}
-      {sfApi?.activeSite && (
-        <div className="flex h-7.5 shrink-0 items-center justify-between border-b border-[#303030] bg-[#1A1A1A] px-3 text-[11px] font-sans">
-          <div className="flex items-center gap-2 min-w-0">
-            <span className="font-mono font-bold text-[#FF6B00] text-[11px]">
-              {sfApi.activeSite.code}
-            </span>
-            <span className="text-[#404040]">|</span>
-            <span className="text-[#808080] truncate hidden sm:inline text-[11px]">
-              {sfApi.activeSite.name}
-            </span>
-          </div>
 
-          <div className="flex items-center gap-1.5 overflow-x-auto">
-            {sfApi.activeSite.vms.map((vm) => {
-              const isCurrent = s?.ip === vm.ip;
-              return (
-                <button
-                  key={vm.id}
-                  onClick={() => {
-                    if (sfApi.activeTicket) {
-                      sfApi.addTerminalToTicket(sfApi.activeTicket.id, vm);
-                    }
-                  }}
-                  className={cn(
-                    "flex items-center gap-1.5 px-2 py-0.5 rounded text-[10.5px] font-mono transition-colors cursor-pointer border",
-                    isCurrent
-                      ? "border-[#FF6B00]/60 bg-[#2A1810] text-[#FF6B00] font-semibold"
-                      : "border-[#303030] bg-[#222222] text-[#808080] hover:text-[#E0E0E0] hover:bg-[#282828]"
-                  )}
-                  title={`Connect to ${vm.name} (${vm.ip})`}
-                >
-                  <span
-                    className={cn(
-                      "px-1 py-0.2 rounded text-[8.5px] font-mono font-bold uppercase",
-                      isCurrent ? "bg-[#FF6B00] text-black" : "bg-[#2A2A2A] text-[#808080]"
-                    )}
-                  >
-                    {vm.role === "primary" ? "PRI" : "VM"}
-                  </span>
-                  <span>{vm.role === "primary" ? "Primary" : vm.name.split("-")[1] || vm.role}</span>
-                  <span className="text-[#606060] text-[9.5px]">({vm.ip})</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
 
       {/* Main Terminal Area */}
       <div

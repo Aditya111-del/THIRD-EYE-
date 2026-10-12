@@ -1,0 +1,47 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "Inspect package.json and summarize the scripts"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "read_file",
+            "args": {
+              "path": "package.json"
+            },
+            "id": "call_1759900"
+          },
+          "thoughtSignature": "EnMKcQFpFH0TVkMmhb+5ZeX9MdGy0qRUJ2LTvoyCIRRLttAX7k6LNvkSHf3mJQ2qrIbSsfGS1Z5iYolxvWiEvtmpO7Oa1skkk+XCJXAg56LcrvZj1Yu8SCUJoneo0xxa7Jn9ZELgVKxvETldv2NggCk1ONm1"
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1759900",
+          "name": "read_file",
+          "args": {
+            "path": "package.json"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "read_file",
+      "toolCallId": "call_1759900",
+      "content": {
+        "path": "package.json",
+        "content": "1: {\n2:   \"name\": \"third-eye\",\n3:   \"version\": \"1.0.0\",\n4:   \"description\": \"THIRD EYE — AI-Native Terminal Workspace powered by Electron, node-pty, and GPT-4o diagnostics\",\n5:   \"main\": \"electron/main.js\",\n6:   \"private\": true,\n7:   \"workspaces\": [\n8:     \"packages/*\",\n9:     \"Frontend/guide-build-main\",\n10:     \"backend/*\"\n11:   ],\n12:   \"scripts\": {\n13:     \"start\": \"electron .\",\n14:     \"build:shared\": \"npm --prefix packages/shared run build\",\n15:     \"smoke\": \"node scripts/smoke-test.js\",\n16:     \"dev\": \"concurrently -k -n \\\"PTY-SVC,AI-SVC,SF-SVC,FRONTEND,ELECTRON\\\" -c \\\"blue,green,yellow,magenta,cyan\\\" \\\"npm --prefix backend/pty-service run start\\\" \\\"npm --prefix backend/ai-service run start\\\" \\\"npm --prefix backend/salesforce-service run start\\\" \\\"npm --prefix Frontend/guide-build-main run dev\\\" \\\"electron .\\\"\",\n17:     \"dev:full\": \"concurrently -k -n \\\"PTY-SVC,AI-SVC,SF-SVC,FRONTEND,ELECTRON\\\" -c \\\"blue,green,yellow,magenta,cyan\\\" \\\"npm --prefix backend/pty-service run start\\\" \\\"npm --prefix backend/ai-service run start\\\" \\\"npm --prefix backend/salesforce-service run start\\\" \\\"npm --prefix Frontend/guide-build-main run dev\\\" \\\"electron .\\\"\",\n18:     \"dev:frontend\": \"npm --prefix Frontend/guide-build-main run dev\",\n19:     \"dev:electron\": \"electron .\",\n20:     \"dev:backend\": \"concurrently -k -n \\\"PTY,AI,SF\\\" -c \\\"blue,green,yellow\\\" \\\"npm --prefix backend/pty-service run start\\\" \\\"npm --prefix backend/ai-service run start\\\" \\\"npm --prefix backend/salesforce-service run start\\\"\",\n21:     \"dev:salesforce\": \"npm --prefix backend/salesforce-service run start\",\n22:     \"build:frontend\": \"npm --prefix Frontend/guide-build-main run build\",\n23:     \"build:electron\": \"electron-builder\",\n24:     \"build\": \"npm run build:shared && npm run build:frontend && npm run build:electron\",\n25:     \"rebuild\": \"electron-rebuild -f -w node-pty\",\n26:     \"postinstall\": \"node -e \\\"console.log('Dependencies verified')\\\"\"\n27:   },\n28:   \"keywords\": [\n29:     \"terminal\",\n30:     \"pty\",\n31:     \"ai\",\n32:     \"electron\",\n33:     \"devops\",\n34:     \"third-eye\"\n35:   ],\n36:   \"author\": \"THIRD EYE Team\",\n37:   \"license\": \"MIT\",\n38:   \"dependencies\": {\n39:     \"dotenv\": \"^16.4.5\",\n40:     \"node-pty\": \"^1.0.0\",\n41:     \"openai\": \"^4.38.0\"\n42:   },\n43:   \"devDependencies\": {\n44:     \"@electron/rebuild\": \"^3.6.0\",\n45:     \"concurrently\": \"^8.2.2\",\n46:     \"cross-env\": \"^7.0.3\",\n47:     \"electron\": \"^29.1.5\",\n48:     \"electron-builder\": \"^24.13.3\",\n49:     \"wait-on\": \"^7.2.0\"\n50:   },\n51:   \"build\": {\n52:     \"appId\": \"com.thirdeye.ide\",\n53:     \"productName\": \"THIRD EYE\",\n54:     \"directories\": {\n55:       \"output\": \"dist\"\n56:     },\n57:     \"files\": [\n58:       \"electron/**/*\",\n59:       \"Frontend/guide-build-main/dist/**/*\",\n60:       \"Frontend/guide-build-main/.output/**/*\",\n61:       \".env\",\n62:       \"package.json\"\n63:     ],\n64:     \"win\": {\n65:       \"target\": \"nsis\"\n66:     },\n67:     \"mac\": {\n68:       \"target\": \"dmg\",\n69:       \"category\": \"public.app-category.developer-tools\"\n70:     },\n71:     \"linux\": {\n72:       \"target\": \"AppImage\",\n73:       \"category\": \"Development\"\n74:     }\n75:   }\n76: }\n77: ",
+        "totalLines": 77,
+        "startLine": 1,
+        "endLine": 77,
+        "truncated": false
+      }
+    }
+  ],
+  "timestamp": 1791754335769
+}

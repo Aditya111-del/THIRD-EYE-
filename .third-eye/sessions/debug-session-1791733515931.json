@@ -1,0 +1,419 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "analyse this and correct this file"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "listDir",
+            "args": {
+              "maxDepth": 3,
+              "dirPath": "."
+            },
+            "id": "call_1492383"
+          },
+          "thoughtSignature": "EmAKXgFpFH0T/16mj2ITyUSs+4pjDs65kyMg2sUR+xwsOdMpCQ/I1GYbXDJgoRxvztfRalPUr/372gfbg8DzE9tVJ7yk9Gwftl46QmESAB49rpP8HLhv7CUr+WEe2T4k4P8="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1492383",
+          "name": "listDir",
+          "args": {
+            "maxDepth": 3,
+            "dirPath": "."
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "listDir",
+      "toolCallId": "call_1492383",
+      "content": {
+        "dir": ".",
+        "entries": [
+          {
+            "name": ".env",
+            "relativePath": ".env",
+            "isDirectory": false
+          },
+          {
+            "name": ".env.example",
+            "relativePath": ".env.example",
+            "isDirectory": false
+          },
+          {
+            "name": ".gitignore",
+            "relativePath": ".gitignore",
+            "isDirectory": false
+          },
+          {
+            "name": ".third-eye",
+            "relativePath": ".third-eye",
+            "isDirectory": true
+          },
+          {
+            "name": "checkpoints",
+            "relativePath": ".third-eye/checkpoints",
+            "isDirectory": true
+          },
+          {
+            "name": "cp_1791731342437_066609.json",
+            "relativePath": ".third-eye/checkpoints/cp_1791731342437_066609.json",
+            "isDirectory": false
+          },
+          {
+            "name": "cp_1791731344697_a9d0b4.json",
+            "relativePath": ".third-eye/checkpoints/cp_1791731344697_a9d0b4.json",
+            "isDirectory": false
+          },
+          {
+            "name": "cp_1791731348172_4de500.json",
+            "relativePath": ".third-eye/checkpoints/cp_1791731348172_4de500.json",
+            "isDirectory": false
+          },
+          {
+            "name": "cp_1791731353715_1824b4.json",
+            "relativePath": ".third-eye/checkpoints/cp_1791731353715_1824b4.json",
+            "isDirectory": false
+          },
+          {
+            "name": "sessions",
+            "relativePath": ".third-eye/sessions",
+            "isDirectory": true
+          },
+          {
+            "name": "agent-test.json",
+            "relativePath": ".third-eye/sessions/agent-test.json",
+            "isDirectory": false
+          },
+          {
+            "name": "session-1791720608835.json",
+            "relativePath": ".third-eye/sessions/session-1791720608835.json",
+            "isDirectory": false
+          },
+          {
+            "name": "session-1791727097492.json",
+            "relativePath": ".third-eye/sessions/session-1791727097492.json",
+            "isDirectory": false
+          },
+          {
+            "name": "session-1791731339514.json",
+            "relativePath": ".third-eye/sessions/session-1791731339514.json",
+            "isDirectory": false
+          },
+          {
+            "name": "session-1791732384541.json",
+            "relativePath": ".third-eye/sessions/session-1791732384541.json",
+            "isDirectory": false
+          },
+          {
+            "name": "test-analyse.json",
+            "relativePath": ".third-eye/sessions/test-analyse.json",
+            "isDirectory": false
+          },
+          {
+            "name": "test-hii.json",
+            "relativePath": ".third-eye/sessions/test-hii.json",
+            "isDirectory": false
+          },
+          {
+            "name": "Frontend",
+            "relativePath": "Frontend",
+            "isDirectory": true
+          },
+          {
+            "name": "guide-build-main",
+            "relativePath": "Frontend/guide-build-main",
+            "isDirectory": true
+          },
+          {
+            "name": ".gitignore",
+            "relativePath": "Frontend/guide-build-main/.gitignore",
+            "isDirectory": false
+          }
+        ],
+        "totalEntries": 86,
+        "truncated": false,
+        "note": "[Truncated to 20 of 86 directory entries]"
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "runTerminal",
+            "args": {
+              "command": "git status"
+            },
+            "id": "call_1586458"
+          },
+          "thoughtSignature": "EmAKXgFpFH0TEDfWzV40a4b3MKQX0Cu88x/Ns5wpTAozQJnHnhxACe4TqkKHvx3lNkdhZNqWmEepA48m1k+QLgeOZ+FRebDcvcSFd2MquU6ei8ioKDq2sYPFC5nu/SiwrpY="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1586458",
+          "name": "runTerminal",
+          "args": {
+            "command": "git status"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "runTerminal",
+      "toolCallId": "call_1586458",
+      "content": {
+        "command": "git status",
+        "output": "On branch main\nYour branch is up to date with 'origin/main'.\n\nChanges not staged for commit:\n  (use \"git add <file>...\" to update what will be committed)\n  (use \"git restore <file>...\" to discard changes in working directory)\n\tmodified:   Frontend/guide-build-main/package.json\n\tmodified:   Frontend/guide-build-main/src/components/ai-assistant/AiSidecar.tsx\n\tmodified:   Frontend/guide-build-main/src/components/explorer/SitesExplorer.tsx\n\tmodified:   Frontend/guide-build-main/src/components/layout/ActivityBar.tsx\n\tmodified:   Frontend/guide-build-main/src/components/layout/AntigravityTitleBar.tsx\n\tmodified:   Frontend/guide-build-main/src/components/layout/MainLayout.tsx\n\tmodified:   Frontend/guide-build-main/src/components/terminal/TerminalStage.tsx\n\tmodified:   Frontend/guide-build-main/src/components/terminal/XtermView.tsx\n\tmodified:   Frontend/guide-build-main/src/hooks/useAiContext.ts\n\tmodified:   Frontend/guide-build-main/src/hooks/useSalesforceWorkspace.ts\n\tmodified:   Frontend/guide-build-main/src/hooks/useTerminalBackend.ts\n\tmodified:   Frontend/guide-build-main/src/hooks/useTerminalSession.ts\n\tmodified:   Frontend/guide-build-main/src/lib/terminalIntelligence.ts\n\tmodified:   Frontend/guide-build-main/src/styles.css\n\tmodified:   Frontend/guide-build-main/src/types/electron.d.ts\n\tmodified:   Frontend/guide-build-main/tsconfig.json\n\tmodified:   Frontend/guide-build-main/vite.config.ts\n\tmodified:   README.md\n\tmodified:   backend/ai-service/agent.js\n\tmodified:   backend/ai-service/package.json\n\tmodified:   backend/pty-service/package.json\n\tmodified:   backend/pty-service/server.js\n\tmodified:   electron/aiEngine.js\n\tmodified:   electron/main.js\n\tmodified:   electron/preload.js\n\tmodified:   electron/ptyManager.js\n\tmodified:   package-lock.json\n\tmodified:   package.json\n\nUntracked files:\n  (use \"git add <file>...\" to include in what will be committed)\n\t.third-eye/\n\tFrontend/guide-build-main/src/components/ai-assistant/AiMarkdownView.tsx\n\tFrontend/guide-build-main/src/components/editor/\n\tFrontend/guide-build-main/src/components/explorer/DebugExplorer.tsx\n\tFrontend/guide-build-main/src/components/explorer/ExtensionsExplorer.tsx\n\tFrontend/guide-build-main/src/components/explorer/RemoteExplorer.tsx\n\tFrontend/guide-build-main/src/components/explorer/SearchExplorer.tsx\n\tFrontend/guide-build-main/src/components/explorer/SourceControlExplorer.tsx\n\tFrontend/guide-build-main/src/components/explorer/TestingExplorer.tsx\n\tFrontend/guide-build-main/src/components/explorer/VsCodeFileExplorer.tsx\n\tFrontend/guide-build-main/src/components/terminal/VsCodeBottomTerminal.tsx\n\tFrontend/guide-build-main/src/components/terminal/terminalState.ts\n\tFrontend/guide-build-main/src/editor/\n\tFrontend/guide-build-main/src/hooks/useEditorWorkspace.ts\n\tbackend/ai-service/scratch_test.js\n\tbackend/ai-service/src/\n\tbackend/ai-service/tsconfig.json\n\tbackend/pty-service/src/\n\tbackend/pty-service/tsconfig.json\n\tdocs/\n\tpackages/\n\tscripts/\n\tskills/\n\nno changes added to commit (use \"git add\" and/or \"git commit -a\")\n",
+        "exitCode": 0,
+        "durationMs": 29,
+        "background": false,
+        "truncated": false
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "runTerminal",
+            "args": {
+              "command": "git diff"
+            },
+            "id": "call_1723799"
+          },
+          "thoughtSignature": "EmAKXgFpFH0Tmt7aVxVbC8zUiNc3MtDumoYdWgHPYJQP0ne72N3ToVJ5afMADoRIFckRaGMsEuaiaSchVT8rFwAc+psaN6W+tuswfwTAiSq7cFqjwV/qkG+lKHr3SPmZNNI="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1723799",
+          "name": "runTerminal",
+          "args": {
+            "command": "git diff"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "runTerminal",
+      "toolCallId": "call_1723799",
+      "content": {
+        "command": "git diff",
+        "output": "-      \"dependencies\": {\n-        \"fast-deep-equal\": \"^3.1.3\",\n-        \"fast-uri\": \"^3.0.1\",\n-        \"json-schema-traverse\": \"^1.0.0\",\n-        \"require-from-string\": \"^2.0.2\"\n-      },\n-      \"funding\": {\n-        \"type\": \"github\",\n-        \"url\": \"https://github.com/sponsors/epoberezkin\"\n-      }\n-    },\n     \"node_modules/ansi-regex\": {\n       \"version\": \"5.0.1\",\n       \"resolved\": \"https://registry.npmjs.org/ansi-regex/-/ansi-regex-5.0.1.tgz\",\n@@ -8355,6 +8396,16 @@\n         \"node\": \">=12\"\n       }\n     },\n+    \"node_modules/dompurify\": {\n+      \"version\": \"3.4.15\",\n+      \"resolved\": \"https://registry.npmjs.org/dompurify/-/dompurify-3.4.15.tgz\",\n+      \"integrity\": \"sha512-EUBjM+B+lkDE41iE82DDSCfkoPGfXx8IxFxPMjNzm/Uk4xDet77rTN9wqlxlVg71kK7XGuUMv6wUxJUwwv+Xyw==\",\n+      \"license\": \"(MPL-2.0 OR Apache-2.0)\",\n+      \"peer\": true,\n+      \"optionalDependencies\": {\n+        \"@types/trusted-types\": \"^2.0.7\"\n+      }\n+    },\n     \"node_modules/dotenv\": {\n       \"version\": \"16.6.1\",\n       \"resolved\": \"https://registry.npmjs.org/dotenv/-/dotenv-16.6.1.tgz\",\n@@ -9219,7 +9270,7 @@\n       \"version\": \"3.1.3\",\n       \"resolved\": \"https://registry.npmjs.org/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz\",\n       \"integrity\": \"sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==\",\n-      \"devOptional\": true,\n+      \"dev\": true,\n       \"license\": \"MIT\"\n     },\n     \"node_modules/fast-diff\": {\n@@ -9252,23 +9303,6 @@\n       \"dev\": true,\n       \"license\": \"MIT\"\n     },\n-    \"node_modules/fast-uri\": {\n-      \"version\": \"3.1.8\",\n-      \"resolved\": \"https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.8.tgz\",\n-      \"integrity\": \"sha512-GZMtZUTNRpOVIECoXwLNZS5xUGE+mVNbTB8h/7Rwh2TFWcBQiPzTgyZi05BF9UMZKkLJv8XBRJTlU7zg8+ZfMg==\",\n-      \"extraneous\": true,\n-      \"funding\": [\n-        {\n-          \"type\": \"github\",\n-          \"url\": \"https://github.com/sponsors/fastify\"\n-        },\n-        {\n-          \"type\": \"opencollective\",\n-          \"url\": \"https://opencollective.com/fastify\"\n-        }\n-      ],\n-      \"license\": \"BSD-3-Clause\"\n-    },\n     \"node_modules/fd-slicer\": {\n       \"version\": \"1.1.0\",\n       \"resolved\": \"https://registry.npmjs.org/fd-slicer/-/fd-slicer-1.1.0.tgz\",\n@@ -10516,13 +10550,6 @@\n       \"dev\": true,\n       \"license\": \"MIT\"\n     },\n-    \"node_modules/json-schema-traverse\": {\n-      \"version\": \"1.0.0\",\n-      \"resolved\": \"https://registry.npmjs.org/json-schema-traverse/-/json-schema-traverse-1.0.0.tgz\",\n-      \"integrity\": \"sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==\",\n-      \"extraneous\": true,\n-      \"license\": \"MIT\"\n-    },\n     \"node_modules/json-stable-stringify-without-jsonify\": {\n       \"version\": \"1.0.1\",\n       \"resolved\": \"https://registry.npmjs.org/json-stable-stringify-without-jsonify/-/json-stable-stringify-without-jsonify-1.0.1.tgz\",\n@@ -11404,6 +11431,19 @@\n         \"node\": \">=12\"\n       }\n     },\n+    \"node_modules/marked\": {\n+      \"version\": \"14.0.0\",\n+      \"resolved\": \"https://registry.npmjs.org/marked/-/marked-14.0.0.tgz\",\n+      \"integrity\": \"sha512-uIj4+faQ+MgHgwUW1l2PsPglZLOLOT1uErt06dAPtx2kjteLAkbsd/0FiYg/MGS+i7ZKLb7w2WClxHkzOOuryQ==\",\n+      \"license\": \"MIT\",\n+      \"peer\": true,\n+      \"bin\": {\n+        \"marked\": \"bin/marked.js\"\n+      },\n+      \"engines\": {\n+        \"node\": \">= 18\"\n+      }\n+    },\n     \"node_modules/matcher\": {\n       \"version\": \"3.0.0\",\n       \"resolved\": \"https://registry.npmjs.org/matcher/-/matcher-3.0.0.tgz\",\n@@ -11703,6 +11743,17 @@\n         \"num-sort\": \"^2.0.0\"\n       }\n     },\n+    \"node_modules/monaco-editor\": {\n+      \"version\": \"0.57.0\",\n+      \"resolved\": \"https://registry.npmjs.org/monaco-editor/-/monaco-editor-0.57.0.tgz\",\n+      \"integrity\": \"sha512-5BkI9KGoqrNvBGUe15/QlZq3OooZ8WLg1AxTpaqHRCP3HNpzPPZKE2EDz8M7c+VRmCeUw1Brp4cx/PWm3kI/5A==\",\n+      \"license\": \"MIT\",\n+      \"peer\": true,\n+      \"dependencies\": {\n+        \"dompurify\": \"3.4.15\",\n+        \"marked\": \"14.0.0\"\n+      }\n+    },\n     \"node_modules/ms\": {\n       \"version\": \"2.1.3\",\n       \"resolved\": \"https://registry.npmjs.org/ms/-/ms-2.1.3.tgz\",\n@@ -12058,13 +12109,6 @@\n         \"node\": \">=12.20.0\"\n       }\n     },\n-    \"node_modules/ocache\": {\n-      \"version\": \"0.3.0\",\n-      \"resolved\": \"https://registry.npmjs.org/ocache/-/ocache-0.3.0.tgz\",\n-      \"integrity\": \"sha512-RS/9P0zeBb0gDJmadGERLH8lZNXK7xbufTDhclkXGvFGTsj0G4M5/cLk+mizcERH29mLXNnocfB5wjcK70wGJg==\",\n-      \"extraneous\": true,\n-      \"license\": \"MIT\"\n-    },\n     \"node_modules/ofetch\": {\n       \"version\": \"2.0.0-alpha.3\",\n       \"resolved\": \"https://registry.npmjs.org/ofetch/-/ofetch-2.0.0-alpha.3.tgz\",\n@@ -13164,16 +13208,6 @@\n         \"node\": \">=0.10.0\"\n       }\n     },\n-    \"node_modules/require-from-string\": {\n-      \"version\": \"2.0.2\",\n-      \"resolved\": \"https://registry.npmjs.org/require-from-string/-/require-from-string-2.0.2.tgz\",\n-      \"integrity\": \"sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==\",\n-      \"extraneous\": true,\n-      \"license\": \"MIT\",\n-      \"engines\": {\n-        \"node\": \">=0.10.0\"\n-      }\n-    },\n     \"node_modules/requires-port\": {\n       \"version\": \"1.0.0\",\n       \"resolved\": \"https://registry.npmjs.org/requires-port/-/requires-port-1.0.0.tgz\",\n@@ -13882,6 +13916,12 @@\n         \"node\": \">= 6\"\n       }\n     },\n+    \"node_modules/state-local\": {\n+      \"version\": \"1.0.7\",\n+      \"resolved\": \"https://registry.npmjs.org/state-local/-/state-local-1.0.7.tgz\",\n+      \"integrity\": \"sha512-HTEHMNieakEnoe33shBYcZ7NX83ACUjCu8c40iOGEZsngj9zRnkqS9j1pqQPXwobB0ZcVTk27REb7COQ0UR59w==\",\n+      \"license\": \"MIT\"\n+    },\n     \"node_modules/statuses\": {\n       \"version\": \"2.0.2\",\n       \"resolved\": \"https://registry.npmjs.org/statuses/-/statuses-2.0.2.tgz\",\n@@ -14147,6 +14187,10 @@\n       \"resolved\": \"backend/pty-service\",\n       \"link\": true\n     },\n+    \"node_modules/third-eye-salesforce-service\": {\n+      \"resolved\": \"backend/salesforce-service\",\n+      \"link\": true\n+    },\n     \"node_modules/tiny-invariant\": {\n       \"version\": \"1.3.3\",\n       \"resolved\": \"https://registry.npmjs.org/tiny-invariant/-/tiny-invariant-1.3.3.tgz\",\ndiff --git a/package.json b/package.json\nindex 8fc6bbb..4bd87ad 100644\n--- a/package.json\n+++ b/package.json\n@@ -5,11 +5,14 @@\n   \"main\": \"electron/main.js\",\n   \"private\": true,\n   \"workspaces\": [\n+    \"packages/*\",\n     \"Frontend/guide-build-main\",\n     \"backend/*\"\n   ],\n   \"scripts\": {\n     \"start\": \"electron .\",\n+    \"build:shared\": \"npm --prefix packages/shared run build\",\n+    \"smoke\": \"node scripts/smoke-test.js\",\n     \"dev\": \"concurrently -k -n \\\"PTY-SVC,AI-SVC,SF-SVC,FRONTEND,ELECTRON\\\" -c \\\"blue,green,yellow,magenta,cyan\\\" \\\"npm --prefix backend/pty-service run start\\\" \\\"npm --prefix backend/ai-service run start\\\" \\\"npm --prefix backend/salesforce-service run start\\\" \\\"npm --prefix Frontend/guide-build-main run dev\\\" \\\"electron .\\\"\",\n     \"dev:full\": \"concurrently -k -n \\\"PTY-SVC,AI-SVC,SF-SVC,FRONTEND,ELECTRON\\\" -c \\\"blue,green,yellow,magenta,cyan\\\" \\\"npm --prefix backend/pty-service run start\\\" \\\"npm --prefix backend/ai-service run start\\\" \\\"npm --prefix backend/salesforce-service run start\\\" \\\"npm --prefix Frontend/guide-build-main run dev\\\" \\\"electron .\\\"\",\n     \"dev:frontend\": \"npm --prefix Frontend/guide-build-main run dev\",\n@@ -18,7 +21,7 @@\n     \"dev:salesforce\": \"npm --prefix backend/salesforce-service run start\",\n     \"build:frontend\": \"npm --prefix Frontend/guide-build-main run build\",\n     \"build:electron\": \"electron-builder\",\n-    \"build\": \"npm run build:frontend && npm run build:electron\",\n+    \"build\": \"npm run build:shared && npm run build:frontend && npm run build:electron\",\n     \"rebuild\": \"electron-rebuild -f -w node-pty\",\n     \"postinstall\": \"node -e \\\"console.log('Dependencies verified')\\\"\"\n   },\n",
+        "exitCode": 0,
+        "durationMs": 46,
+        "background": false,
+        "truncated": true
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "runTerminal",
+            "args": {
+              "command": "npm run dev --dry-run || npm test || npm run build || node scripts/smoke-test.js"
+            },
+            "id": "call_1653884"
+          },
+          "thoughtSignature": "EmAKXgFpFH0TGUHJQ7IXb5EYYhUf1rN/PPbCBfv5hbCRJJi39yicG0OrFHAtkA3YiCo6+R0ZrzKxgB060ENdRssTGYD4eUy1bRFEhkzUXCecbP8XhIItGaqGbGzed/acvsQ="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1653884",
+          "name": "runTerminal",
+          "args": {
+            "command": "npm run dev --dry-run || npm test || npm run build || node scripts/smoke-test.js"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "runTerminal",
+      "toolCallId": "call_1653884",
+      "content": {
+        "command": "npm run dev --dry-run || npm test || npm run build || node scripts/smoke-test.js",
+        "output": "[SF-SVC]   port: 4003\n[SF-SVC] }\n[SF-SVC] \n[SF-SVC] Node.js v26.9.0\n[PTY-SVC] node:events:505\n[PTY-SVC]     throw er; // Unhandled 'error' event\n[PTY-SVC]     ^\n[PTY-SVC] \n[PTY-SVC] Error: listen EADDRINUSE: address already in use :::4001\n[PTY-SVC]     at Server.setupListenHandle [as _listen2] (node:net:2328:16)\n[PTY-SVC]     at listenInCluster (node:net:2437:12)\n[PTY-SVC]     at Server.listen (node:net:2562:7)\n[PTY-SVC]     at Object.startPtyServer (/Users/adityasalgotra/Downloads/THIRD_EYE/backend/pty-service/dist/server.js:140:12)\n[PTY-SVC]     at Object.<anonymous> (/Users/adityasalgotra/Downloads/THIRD_EYE/backend/pty-service/server.js:9:15)\n[PTY-SVC]     at Module._compile (node:internal/modules/cjs/loader:1956:14)\n[PTY-SVC]     at Object..js (node:internal/modules/cjs/loader:2096:10)\n[PTY-SVC]     at Module.load (node:internal/modules/cjs/loader:1678:32)\n[PTY-SVC]     at Module._load (node:internal/modules/cjs/loader:1470:12)\n[PTY-SVC]     at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)\n[PTY-SVC] Emitted 'error' event on WebSocketServer instance at:\n[PTY-SVC]     at Server.emit (node:events:514:20)\n[PTY-SVC]     at emitErrorNT (node:net:2416:8)\n[PTY-SVC]     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {\n[PTY-SVC]   code: 'EADDRINUSE',\n[PTY-SVC]   errno: -48,\n[PTY-SVC]   syscall: 'listen',\n[PTY-SVC]   address: '::',\n[PTY-SVC]   port: 4001\n[PTY-SVC] }\n[PTY-SVC] \n[PTY-SVC] Node.js v26.9.0\n[SF-SVC] npm --prefix backend/salesforce-service run start exited with code 1\n--> Sending SIGTERM to other processes..\n[PTY-SVC] npm --prefix backend/pty-service run start exited with code 1\n--> Sending SIGTERM to other processes..\n[ELECTRON] [Electron] Chokidar not loaded, falling back to fs.watch\n[ELECTRON] [Electron] Native fs.watch initialized on: /Users/adityasalgotra/Downloads/THIRD_EYE\n[AI-SVC] node:events:505\n[AI-SVC]     throw er; // Unhandled 'error' event\n[AI-SVC]     ^\n[AI-SVC] \n[AI-SVC] Error: listen EADDRINUSE: address already in use :::4002\n[AI-SVC]     at Server.setupListenHandle [as _listen2] (node:net:2328:16)\n[AI-SVC]     at listenInCluster (node:net:2437:12)\n[AI-SVC]     at Server.listen (node:net:2562:7)\n[AI-SVC]     at app.listen (/Users/adityasalgotra/Downloads/THIRD_EYE/node_modules/express/lib/application.js:635:24)\n[AI-SVC]     at Object.<anonymous> (/Users/adityasalgotra/Downloads/THIRD_EYE/backend/ai-service/agent.js:2292:5)\n[AI-SVC]     at Module._compile (node:internal/modules/cjs/loader:1956:14)\n[AI-SVC]     at Object..js (node:internal/modules/cjs/loader:2096:10)\n[AI-SVC]     at Module.load (node:internal/modules/cjs/loader:1678:32)\n[AI-SVC]     at Module._load (node:internal/modules/cjs/loader:1470:12)\n[AI-SVC]     at wrapModuleLoad (node:internal/modules/cjs/loader:261:19)\n[AI-SVC] Emitted 'error' event on Server instance at:\n[AI-SVC]     at emitErrorNT (node:net:2416:8)\n[AI-SVC]     at process.processTicksAndRejections (node:internal/process/task_queues:90:21) {\n[AI-SVC]   code: 'EADDRINUSE',\n[AI-SVC]   errno: -48,\n[AI-SVC]   syscall: 'listen',\n[AI-SVC]   address: '::',\n[AI-SVC]   port: 4002\n[AI-SVC] }\n[AI-SVC] \n[AI-SVC] Node.js v26.9.0\n[AI-SVC] npm --prefix backend/ai-service run start exited with code SIGTERM\n--> Sending SIGTERM to other processes..\n[ELECTRON] /Users/adityasalgotra/Downloads/THIRD_EYE/node_modules/electron/dist/Electron.app/Contents/MacOS/Electron exited with signal SIGTERM\n[ELECTRON] electron . exited with code 1\n--> Sending SIGTERM to other processes..\n[FRONTEND] npm --prefix Frontend/guide-build-main run dev exited with code SIGTERM\n\n> third-eye@1.0.0 build\n> npm run build:shared && npm run build:frontend && npm run build:electron\n\n\n> third-eye@1.0.0 build:shared\n> npm --prefix packages/shared run build\n\n\n> @third-eye/shared@1.0.0 build\n> tsc\n\n\n> third-eye@1.0.0 build:frontend\n> npm --prefix Frontend/guide-build-main run build\n\n\n> build\n> vite build\n\nvite v8.1.5 building client environment for production...\n\u001b[2K\rtransforming...✓ 2006 modules transformed.\nrendering chunks...\ncomputing gzip size...\n.output/public/assets/styles-epMXeTGl.css           110.63 kB │ gzip:  19.99 kB\n.output/public/assets/rolldown-runtime-Bh1tDfsg.js    0.56 kB │ gzip:   0.36 kB\n.output/public/assets/addon-fit-HLcUUmc2.js           1.49 kB │ gzip:   0.65 kB\n.output/public/assets/xterm-DgnrSxjo.js             287.25 kB │ gzip:  67.83 kB\n.output/public/assets/routes-RTbriNHN.js            478.13 kB │ gzip: 116.27 kB\n.output/public/assets/index-D0sLwszy.js             602.58 kB │ gzip: 187.59 kB\n\n✓ built in 589ms\nvite v8.1.5 building ssr environment for production...\n\u001b[2K\rtransforming...✓ 94 modules transformed.\nrendering chunks...\ncomputing gzip size...\nnode_modules/.nitro/vite/services/ssr/assets/styles-epMXeTGl.css                     110.63 kB │ gzip: 19.99 kB\nnode_modules/.nitro/vite/services/ssr/assets/empty-plugin-adapters-CykxgOdX.js         0.23 kB │ gzip:  0.16 kB\nnode_modules/.nitro/vite/services/ssr/assets/_tanstack-start-manifest_v-Da_7Dq9Q.js    0.62 kB │ gzip:  0.35 kB\nnode_modules/.nitro/vite/services/ssr/assets/start-DELooK1w.js                         1.58 kB │ gzip:  0.71 kB\nnode_modules/.nitro/vite/services/ssr/assets/createCsrfMiddleware-s0u34ry8.js          3.38 kB │ gzip:  1.09 kB\nnode_modules/.nitro/vite/services/ssr/index.js                                         4.61 kB │ gzip:  1.92 kB\nnode_modules/.nitro/vite/services/ssr/assets/router-BAwE3nLp.js                        8.42 kB │ gzip:  2.28 kB\nnode_modules/.nitro/vite/services/ssr/assets/server-yfL1Pf_B.js                       67.60 kB │ gzip: 17.32 kB\nnode_modules/.nitro/vite/services/ssr/assets/routes-BnpFsZKT.js                      522.99 kB │ gzip: 86.30 kB\n\n✓ built in 147ms\n\n[nitro] ◐ Building [Nitro] (preset: cloudflare-module, compatibility: 2026-10-11)\n[nitro] ✔ Generated public .output/public\nvite v8.1.5 building nitro environment for production...\n\u001b[2K\rtransforming...✓ 2032 modules transformed.\nrendering chunks...\ncomputing gzip size...\n.output/server/_ssr/empty-plugin-adapters-CykxgOdX.mjs    0.23 kB │ gzip:   0.16 kB\n.output/server/_chunks/ssr-renderer.mjs                   0.61 kB │ gzip:   0.36 kB\n.output/server/_tanstack-start-manifest_v-Da_7Dq9Q.mjs    0.68 kB │ gzip:   0.39 kB\n.output/server/_libs/react.mjs                            0.81 kB │ gzip:   0.40 kB\n.output/server/_runtime.mjs                               1.14 kB │ gzip:   0.57 kB\n.output/server/_libs/hookable.mjs                         1.17 kB │ gzip:   0.52 kB\n.output/server/_libs/radix-ui__react-compose-refs.mjs     1.24 kB │ gzip:   0.59 kB\n.output/server/_ssr/start-DELooK1w.mjs                    1.53 kB │ gzip:   0.70 kB\n.output/server/_libs/tanstack__react-query.mjs            1.60 kB │ gzip:   0.73 kB\n.output/server/_libs/radix-ui__primitive.mjs              1.83 kB │ gzip:   0.72 kB\n.output/server/_libs/xterm__addon-fit.mjs                 2.01 kB │ gzip:   0.83 kB\n.output/server/_libs/class-variance-authority+clsx.mjs    3.18 kB │ gzip:   1.25 kB\n.output/server/_ssr/createCsrfMiddleware-s0u34ry8.mjs     3.28 kB │ gzip:   1.08 kB\n.output/server/_ssr/ssr.mjs                               4.55 kB │ gzip:   1.92 kB\n.output/server/_libs/radix-ui__react-context+react.mjs    5.75 kB │ gzip:   1.68 kB\n.output/server/_ssr/router-BAwE3nLp.mjs                   9.22 kB │ gzip:   2.40 kB\n.output/server/_libs/h3-v2+rou3+srvx.mjs                  9.89 kB │ gzip:   3.06 kB\n.output/server/index.mjs                                 10.44 kB │ gzip:   3.34 kB\n.output/server/_libs/tanstack__history.mjs               12.51 kB │ gzip:   3.71 kB\n.output/server/_libs/@monaco-editor/loader+[...].mjs     15.87 kB │ gzip:   4.53 kB\n.output/server/_libs/h3+rou3+srvx.mjs                    17.35 kB │ gzip:   4.99 kB\n.output/server/_libs/monaco-editor__react+react.mjs      24.84 kB │ gzip:   6.79 kB\n.output/server/_libs/@tanstack/router-core+[...].mjs     29.69 kB │ gzip:   8.00 kB\n.output/server/_libs/lucide-react.mjs                    30.82 kB │ gzip:   5.83 kB\n.output/server/_ssr/server-yfL1Pf_B.mjs                  65.91 kB │ gzip:  17.19 kB\n.output/server/_libs/react-resizable-panels.mjs          77.89 kB │ gzip:  22.98 kB\n.output/server/_libs/tanstack__query-core.mjs            88.54 kB │ gzip:  21.19 kB\n.output/server/_libs/tailwind-merge.mjs                  88.93 kB │ gzip:  15.71 kB\n.output/server/_libs/@radix-ui/react-dialog+[...].mjs    90.54 kB │ gzip:  21.26 kB\n.output/server/_libs/xterm__xterm.mjs                   372.13 kB │ gzip:  75.32 kB\n.output/server/_ssr/routes-BnpFsZKT.mjs                 549.95 kB │ gzip:  87.32 kB\n.output/server/_libs/@tanstack/react-router+[...].mjs   783.28 kB │ gzip: 165.22 kB\n\n✓ built in 270ms\n[nitro] ℹ Using auto generated worker name: adityas-god-third-eye-frontend-guide-build-main\nℹ Generated .output/server/wrangler.json\nℹ Generated .wrangler/deploy/config.json\nℹ Generated .output/public/_headers\nℹ Generated .output/nitro.json\n\n[nitro] ✔ You can preview this build using npx vite preview\n[nitro] ✔ You can deploy this build using npx nitro deploy --prebuilt\n\n> third-eye@1.0.0 build:electron\n> electron-builder\n\n  • electron-builder  version=24.13.3 os=27.0.0\n  • loaded configuration  file=package.json (\"build\" field)\n  • @electron/rebuild not required if you use electron-builder, please consider to remove excess dependency from devDependencies\n\nTo ensure your native dependencies are always matched electron version, simply add script `\"postinstall\": \"electron-builder install-app-deps\" to your `package.json`\n  • rebuilding native dependencies  dependencies=node-pty@1.1.0 platform=darwin arch=arm64\n  • packaging       platform=darwin arch=arm64 electron=29.4.6 appOutDir=dist/mac-arm64\n  • downloading     url=https://github.com/electron/electron/releases/download/v29.4.6/electron-v29.4.6-darwin-arm64.zip size=95 MB parts=8\n  • downloaded      url=https://github.com/electron/electron/releases/download/v29.4.6/electron-v29.4.6-darwin-arm64.zip duration=21.272s\n  • default Electron icon is used  reason=application icon is not set\n  • skipped macOS application code signing  reason=cannot find valid \"Developer ID Application\" identity or custom non-Apple code signing certificate, it could cause some undefined behaviour, e.g. macOS localized description not visible, see https://electron.build/code-signing allIdentities=     0 identities found\n                                                Valid identities only\n     0 valid identities found\n  • building        target=DMG arch=arm64 file=dist/THIRD EYE-1.0.0-arm64.dmg\n  • Detected arm64 process, HFS+ is unavailable. Creating dmg with APFS - supports Mac OSX 10.12+\n\nnpm error Missing script: \"test\"\nnpm error\nnpm error To see a list of scripts, run:\nnpm error   npm run\nnpm error A complete log of this run can be found in: /Users/adityasalgotra/.npm/_logs/2026-10-11T15_45_21_951Z-debug-0.log\nThe plugin \"vite-tsconfig-paths\" is detected. Vite now supports tsconfig paths resolution natively via the resolve.tsconfigPaths option. You can remove the plugin and set resolve.tsconfigPaths: true in your Vite config instead.\n[plugin builtin:vite-reporter] \n(!) Some chunks are larger than 500 kB after minification. Consider:\n- Using dynamic import() to code-split the application\n- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting\n- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.\n\n WARN  inlineDynamicImports option is ignored because the codeSplitting option is specified.\n\n",
+        "exitCode": null,
+        "durationMs": 30005,
+        "background": false,
+        "truncated": true
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "readFile",
+            "args": {
+              "path": "README.md"
+            },
+            "id": "call_1616251"
+          },
+          "thoughtSignature": "EmAKXgFpFH0TE0B3k+zuv7GZCANjZTp2YXpkuUlsT0hLKHBW4aG7jVH8gjMD496BISIC96TqpaWrZuaw0eIq3l3Sx3Ne+2ELnrNx+SToavt/nNRsvBcIrkRXzRIMw7jXISg="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1616251",
+          "name": "readFile",
+          "args": {
+            "path": "README.md"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "readFile",
+      "toolCallId": "call_1616251",
+      "content": {
+        "path": "README.md",
+        "content": "1: # THIRD EYE — Industry-Grade Agentic IDE\n2: \n3: **THIRD EYE** is a high-performance, enterprise-grade, AI-native Integrated Development Environment (IDE) architected with a decoupled 4-process topology. It unifies terminal multiplexing, Monaco editor workflows, file system virtualization, and an autonomous coding agent loop with side-effect transparency.\n4: \n5: ---\n6: \n7: ## 🏗️ 4-Process System Architecture\n8: \n9: ```text\n10: THIRD_EYE/\n11: ├── package.json                         # Monorepo workspaces: packages/*, Frontend/*, backend/*\n12: ├── packages/\n13: │   └── shared/                          # ★ CONTRACT LAYER (@third-eye/shared)\n14: │       ├── src/ipc.ts                   # Channel constants + typed Request/Response signatures\n15: │       ├── src/tools.ts                 # Tool schemas, parameters, and risk classifications\n16: │       ├── src/events.ts                # Streaming terminal, file watch, and agent events\n17: │       ├── src/agent.ts                 # Message turns, tool calls, checkpoints, context envelopes\n18: │       └── src/permissions.ts           # Permission requests, decisions, and auto-allow policy\n19: │\n20: ├── electron/                            # 🖥️ DESKTOP WRAPPER (Electron Main Process)\n21: │   ├── main.js                          # Window manager, chokidar file watcher, typed IPC router\n22: │   ├── preload.js                       # Secure ContextBridge exposing window.thirdEye & legacy adapters\n23: │   ├── ptyManager.js                    # Native PTY engine adapter\n24: │   └── aiEngine.js                      # Legacy adapter for backward compatibility\n25: │\n26: ├── Frontend/guide-build-main/           # 🎨 RENDERER PROCESS (React 18 + TanStack + Monaco)\n27: │   ├── src/editor/                      # ★ In-Memory File Model Registry & Diff Preview\n28: │   │   ├── fileModels.ts                # In-memory models, versioning, external watch sync\n29: │   │   └── diffPreview/                 # Monaco Diff Editor for AI proposed hunk reviews\n30: │   ├── src/components/ai-assistant/     # AI Sidecar with Slash Commands & Checkpoint Restore\n31: │   ├── src/components/terminal/         # High-performance xterm.js terminal integration\n32: │   └── src/hooks/useEditorWorkspace.ts  # Workspace models & diff review actions\n33: │\n34: ├── backend/\n35: │   ├── pty-service/                     # ⚙️ PTY MICROSERVICE (Port 4001)\n36: │   │   ├── src/sessionRegistry.ts       # Session coordinator (id → process, cwd, shell)\n37: │   │   ├── src/outputBus.ts             # 10,000-line circular ring buffer for late subscribers\n38: │   │   ├── src/shellIntegration.ts      # OSC 633 & OSC 7 sequence parser (cwd & exit code tracking)\n39: │   │   └── src/server.ts                # REST & WebSocket streaming server\n40: │   │\n41: │   ├── ai-service/                      # 🧠 AI AGENT MICROSERVICE (Port 4002)\n42: │   │   ├── src/loop.ts                  # ★ Autonomous 5-Step Agent Loop (max 25 iterations)\n43: │   │   ├── src/tools/                   # Tool registry (readFile, writeFile, editFile, searchCode, runTerminal)\n44: │   │   ├── src/context/                 # Context engineering (repoMap, chunker, retriever, budgetManager, compaction)\n45: │   │   ├── src/tools/checkpoints.ts     # Content-hash snapshot store for 1-click rollback\n46: │   │   └── src/tools/permissions.ts     # Policy engine enforcing user permission decisions\n47: │   │\n48: │   └── salesforce-service/              # ☁️ SALESFORCE INTEGRATION MICROSERVICE (\n... [Remaining content truncated to conserve context tokens]",
+        "totalLines": 101,
+        "startLine": 1,
+        "endLine": 101,
+        "truncated": false
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "runTerminal",
+            "args": {
+              "command": "npm run smoke || node scripts/smoke-test.js"
+            },
+            "id": "call_1379930"
+          },
+          "thoughtSignature": "EmAKXgFpFH0T1krlIfN4aQNbogXUsm6Rg5cU6UmTdByAOOM0BlKO/CArMCYRhsMu1M3gRKC9FnabBgKDahdzNJV1qjO2SISz700XXPxKGJDwOz4XN1UO5yaPShXITuuNMVQ="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1379930",
+          "name": "runTerminal",
+          "args": {
+            "command": "npm run smoke || node scripts/smoke-test.js"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "runTerminal",
+      "toolCallId": "call_1379930",
+      "content": {
+        "command": "npm run smoke || node scripts/smoke-test.js",
+        "output": "\n> third-eye@1.0.0 smoke\n> node scripts/smoke-test.js\n\n\n\u001b[1m\u001b[36m=== THIRD_EYE E2E SMOKE TEST RUNNER ===\u001b[0m\n\n\u001b[32m✔ [PASS]\u001b[0m PTY Service is healthy on port 4001 (uptime: 387s)\n\u001b[32m✔ [PASS]\u001b[0m AI Service is healthy on port 4002 (model: active)\n\u001b[32m✔ [PASS]\u001b[0m Salesforce Service is healthy on port 4003\n\u001b[32m✔ [PASS]\u001b[0m Frontend Web App is serving HTTP 200 on port 3000\n\u001b[32m✔ [PASS]\u001b[0m Workspace File System verified (package: third-eye v1.0.0)\n\u001b[32m✔ [PASS]\u001b[0m Terminal Subsystem active (Current live PTY sessions: 0)\n\u001b[36mℹ [INFO]\u001b[0m Testing AI Agent communication channel...\n\u001b[32m✔ [PASS]\u001b[0m AI Agent replied successfully (VERIFIED...)\n\n\u001b[1m=== SUMMARY: 7 passed, 0 failed ===\u001b[0m\n\n",
+        "exitCode": 0,
+        "durationMs": 2148,
+        "background": false,
+        "truncated": false
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "listDir",
+            "args": {
+              "dirPath": "scripts"
+            },
+            "id": "call_2203442"
+          },
+          "thoughtSignature": "EmAKXgFpFH0TpoZX8WMEwqwRnXXhbG2Uf2WWpoc2GPJ2/F6UiV1t/hm947Yoar9hqyRIXaZ7GSBHCKSNJYodLAKKtPKrZrtnoOBwpeCt54zO4SnTeu2208ZkBGqsBFd6zyg="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_2203442",
+          "name": "listDir",
+          "args": {
+            "dirPath": "scripts"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "listDir",
+      "toolCallId": "call_2203442",
+      "content": {
+        "dir": "scripts",
+        "entries": [
+          {
+            "name": "smoke-test.js",
+            "relativePath": "scripts/smoke-test.js",
+            "isDirectory": false
+          }
+        ],
+        "totalEntries": 1,
+        "truncated": false
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "readFile",
+            "args": {
+              "path": "scripts/smoke-test.js"
+            },
+            "id": "call_1519507"
+          },
+          "thoughtSignature": "EmAKXgFpFH0TPRQT8HMeHWyJI3qdyQG6Ps2GAXNKwoBKFvgt1wjqu3m77Gocr9NmRiO0wiEPhN1bTpDet1P/X/9ADCDGOZEmDz7E1YJH9eeU669rkFAlHgo0nLYZoWdb3pk="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1519507",
+          "name": "readFile",
+          "args": {
+            "path": "scripts/smoke-test.js"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "readFile",
+      "toolCallId": "call_1519507",
+      "content": {
+        "path": "scripts/smoke-test.js",
+        "content": "1: #!/usr/bin/env node\n2: /**\n3:  * THIRD_EYE E2E Smoke Test Runner (Phase 0 Safety Net)\n4:  * Verifies all 4 processes, workspace file system access, terminal subsystem, and AI chat.\n5:  */\n6: \n7: const http = require('http');\n8: const path = require('path');\n9: const fs = require('fs');\n10: \n11: const ANSI = {\n12:   reset: '\\x1b[0m',\n13:   green: '\\x1b[32m',\n14:   red: '\\x1b[31m',\n15:   yellow: '\\x1b[33m',\n16:   cyan: '\\x1b[36m',\n17:   bold: '\\x1b[1m',\n18: };\n19: \n20: function logPass(msg) {\n21:   console.log(`${ANSI.green}✔ [PASS]${ANSI.reset} ${msg}`);\n22: }\n23: function logFail(msg, err) {\n24:   console.error(`${ANSI.red}✖ [FAIL]${ANSI.reset} ${msg}:`, err ? (err.message || err) : '');\n25: }\n26: function logInfo(msg) {\n27:   console.log(`${ANSI.cyan}ℹ [INFO]${ANSI.reset} ${msg}`);\n28: }\n29: \n30: function checkHttp(url, options = {}) {\n31:   return new Promise((resolve, reject) => {\n32:     const parsed = new URL(url);\n33:     const reqOpts = {\n34:       hostname: parsed.hostname,\n35:       port: parsed.port,\n36:       path: parsed.pathname + parsed.search,\n37:       method: options.method || 'GET',\n38:       headers: options.headers || {},\n39:       timeout: options.timeout || 5000,\n40:     };\n41: \n42:     const req = http.request(reqOpts, (res) => {\n43:       let data = '';\n44:       res.on('data', (c) => (data += c));\n45:       res.on('end', () => {\n46:         if (res.statusCode >= 200 && res.statusCode < 400) {\n47:           resolve({ status: res.statusCode, body: data });\n48:         } else {\n49:           reject(new Error(`HTTP ${res.statusCode}: ${data.slice(0, 100)}`));\n50:         }\n51:       });\n52:     });\n53: \n54:     req.on('error', reject);\n55:     req.on('timeout', () => {\n56:       req.destroy();\n57:       reject(new Error(`Request timed out after ${reqOpts.timeout}ms`));\n58:     });\n59: \n60:     if (options.body) {\n61:       req.write(typeof options.body === 'string' ? options.body : JSON.stringify(options.body));\n62:     }\n63:     req.end();\n64:   });\n65: }\n66: \n67: async function runSmokeTest() {\n68:   console.log(`\\n${ANSI.bold}${ANSI.cyan}=== THIRD_EYE E2E SMOKE TEST RUNNER ===${ANSI.reset}\\n`);\n69:   let passed = 0;\n70:   let failed = 0;\n71: \n72:   // 1. Check PTY Service (:4001)\n73:   try {\n74:     const res = await checkHttp('http://127.0.0.1:4001/health');\n75:     const json = JSON.parse(res.body);\n76:     if (json.status === 'ok') {\n77:       logPass(`PTY Service is healthy on port 4001 (uptime: ${Math.round(json.uptime)}s)`);\n78:       passed++;\n79:     } else {\n80:       throw new Error(`Unexpected status: ${json.status}`);\n81:     }\n82:   } catch (err) {\n83:     logFail('PTY Service health check failed', err);\n84:     failed++;\n85:   }\n86: \n87:   // 2. Check AI Service (:4002)\n88:   try {\n89:     const res = await checkHttp('http://127.0.0.1:4002/health');\n90:     const json = JSON.parse(res.body);\n91:     if (json.status === 'ok') {\n92:       logPass(`AI Service is healthy on port 4002 (model: ${json.model || 'active'})`);\n93:       passed++;\n94:     } else {\n95:       throw new Error(`Unexpected status: ${json.status}`);\n96:     }\n97:   } catch (err) {\n98:     logFail('AI Service health check failed', err);\n99:     failed++;\n100:   }\n101: \n102:   // 3. Check Salesforce Service (:4003)\n103:   try {\n104:     const res = await checkHttp('http://127.0.0.1:4003/api/salesforce/health');\n105:     const json = JSON.parse(res.body);\n106:     if (json.status === 'ok') {\n107:       logPass(`Salesforce Service is\n... [Remaining content truncated to conserve context tokens]",
+        "totalLines": 195,
+        "startLine": 1,
+        "endLine": 195,
+        "truncated": false
+      }
+    }
+  ],
+  "timestamp": 1791733557221
+}

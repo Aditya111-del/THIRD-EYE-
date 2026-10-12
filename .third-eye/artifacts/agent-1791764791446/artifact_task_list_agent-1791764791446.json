@@ -1,0 +1,23 @@
+{
+  "id": "artifact_task_list_agent-1791764791446",
+  "sessionId": "agent-1791764791446",
+  "type": "task_list",
+  "title": "Task List & Execution DAG",
+  "description": "Itemized execution graph with live status tracking for: \"stop all. the servers\"",
+  "createdAt": 1791765405247,
+  "updatedAt": 1791767859958,
+  "data": {
+    "goal": "stop all. the servers",
+    "items": [
+      {
+        "id": "step_direct_1",
+        "title": "Stop Running Processes & Port Listeners",
+        "description": "stop all. the servers",
+        "status": "passed",
+        "workerRole": "coder",
+        "result": "Task completed successfully."
+      }
+    ]
+  },
+  "feedback": []
+}

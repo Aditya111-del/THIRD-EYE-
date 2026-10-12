@@ -1,0 +1,12 @@
+{
+  "id": "cp_1791752651768_960988",
+  "timestamp": 1791752651768,
+  "description": "Write package.json",
+  "files": {
+    "/Users/adityasalgotra/Downloads/THIRD_EYE/Frontend/milkshake-site/package.json": {
+      "path": "/Users/adityasalgotra/Downloads/THIRD_EYE/Frontend/milkshake-site/package.json",
+      "hash": "new-file",
+      "content": ""
+    }
+  }
+}

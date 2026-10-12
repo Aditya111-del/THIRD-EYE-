@@ -1,0 +1,29 @@
+{
+  "id": "artifact_walkthrough_agent-1791764791446",
+  "sessionId": "agent-1791764791446",
+  "type": "walkthrough",
+  "title": "Server & Background Tasks Shutdown Report",
+  "description": "Comprehensive deliverable walkthrough with tool-backed verification proof",
+  "createdAt": 1791765984490,
+  "updatedAt": 1791767859959,
+  "data": {
+    "title": "Server & Background Tasks Shutdown Report",
+    "summary": "Task completed successfully.",
+    "changesMade": [
+      "Stop Running Processes & Port Listeners"
+    ],
+    "touchedFiles": [],
+    "evidence": [
+      {
+        "id": "ev_direct_exec",
+        "name": "Tool Execution Verification Gate",
+        "category": "runtime",
+        "status": "passed",
+        "outputSummary": "Commands and inspection verified cleanly with zero unexpected exits.",
+        "verifiedAt": 1791767859959
+      }
+    ],
+    "knownLimitations": []
+  },
+  "feedback": []
+}

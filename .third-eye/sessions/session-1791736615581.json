@@ -1,0 +1,9 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "what is an interface in typescript?"
+    }
+  ],
+  "timestamp": 1791736619553
+}

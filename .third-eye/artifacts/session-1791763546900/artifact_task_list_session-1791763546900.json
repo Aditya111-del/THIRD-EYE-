@@ -1,0 +1,23 @@
+{
+  "id": "artifact_task_list_session-1791763546900",
+  "sessionId": "session-1791763546900",
+  "type": "task_list",
+  "title": "Task List & Execution DAG",
+  "description": "Itemized execution graph with live status tracking for: \"run it\"",
+  "createdAt": 1791763547178,
+  "updatedAt": 1791763553397,
+  "data": {
+    "goal": "run it",
+    "items": [
+      {
+        "id": "step_direct_1",
+        "title": "Execute: npm run dev:full",
+        "description": "npm run dev:full",
+        "status": "passed",
+        "workerRole": "researcher",
+        "result": "The application failed to start because port `4001` is already in use by another process.\n\n```text\n[PTY-SVC] Error: listen EADDRINUSE: address already in use :::4001\n```\n\nPlease stop any existing processes using port `4001` and try running `npm run dev:full` again."
+      }
+    ]
+  },
+  "feedback": []
+}

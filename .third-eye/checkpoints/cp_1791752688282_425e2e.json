@@ -1,0 +1,12 @@
+{
+  "id": "cp_1791752688282_425e2e",
+  "timestamp": 1791752688282,
+  "description": "Pre-mutation snapshot: write_file vite.config.ts",
+  "files": {
+    "/Users/adityasalgotra/Downloads/THIRD_EYE/Frontend/milkshake-site/vite.config.ts": {
+      "path": "/Users/adityasalgotra/Downloads/THIRD_EYE/Frontend/milkshake-site/vite.config.ts",
+      "hash": "new-file",
+      "content": ""
+    }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "id": "cp_1791739223148_19455b",
+  "timestamp": 1791739223150,
+  "description": "test checkpoint",
+  "files": {
+    "/Users/adityasalgotra/Downloads/THIRD_EYE/.third-eye/test-cp.txt": {
+      "path": "/Users/adityasalgotra/Downloads/THIRD_EYE/.third-eye/test-cp.txt",
+      "hash": "916a3f0bc3a428e1a168f4408df82cd5bbb8b08c6d7ac55eff9dff29825134df",
+      "content": "initial content"
+    }
+  }
+}

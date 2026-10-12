@@ -10,7 +10,7 @@ export interface UseTerminalBackendOptions {
   autoSpawn?: boolean;
   spawnConfig?: TerminalSpawnConfig;
   onData?: (data: string) => void;
-  onExit?: (info: { exitCode: number; signal?: number }) => void;
+  onExit?: (info: { exitCode: number; signal?: number | undefined }) => void;
   onErrorDetected?: (event: AIErrorDetectedEvent) => void;
 }
 
@@ -221,7 +221,10 @@ export function useTerminalBackend(options: UseTerminalBackendOptions = {}) {
     // Listen to terminal exit
     const unsubscribeExit = window.electronAPI.terminal.onExit((payload) => {
       if (onExit && payload.id === activeIdRef.current) {
-        onExit(payload);
+        onExit({
+          exitCode: payload.exitCode,
+          ...(payload.signal !== undefined ? { signal: payload.signal } : {}),
+        });
       }
       // Refresh active sessions
       window.electronAPI?.terminal.list().then((list) => setSessions(list));

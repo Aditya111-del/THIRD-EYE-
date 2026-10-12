@@ -31,7 +31,6 @@ interface CommandPaletteModalProps {
   onNewPowerShell: () => void;
   onClearBuffer: () => void;
   onPasteClipboard?: () => void;
-  onSyncSalesforce: () => void;
   onOpenSettings: () => void;
   onToggleLeftSidebar: () => void;
   onToggleRightSidebar: () => void;
@@ -48,7 +47,6 @@ export function CommandPaletteModal({
   onNewPowerShell,
   onClearBuffer,
   onPasteClipboard,
-  onSyncSalesforce,
   onOpenSettings,
   onToggleLeftSidebar,
   onToggleRightSidebar,
@@ -93,14 +91,6 @@ export function CommandPaletteModal({
       shortcut: "Ctrl+V",
       action: onPasteClipboard,
     }] : []),
-    {
-      id: "sf-sync",
-      title: "Salesforce: Sync Live Support Tickets",
-      category: "Salesforce",
-      icon: RefreshCw,
-      shortcut: "Ctrl+R",
-      action: onSyncSalesforce,
-    },
     {
       id: "layout-left",
       title: "Layout: Toggle Primary Side Bar (Explorer)",
@@ -247,7 +237,7 @@ export function CommandPaletteModal({
         <div className="flex items-center justify-between px-3.5 py-2 border-t border-[#282828] bg-[#141414] text-[10.5px] text-[#707070]">
           <span className="flex items-center gap-1.5">
             <Command className="h-3 w-3 text-[#FF6B00]" />
-            <span>Antigravity Quick Command Runner</span>
+            <span>Third Eye Quick Command Runner</span>
           </span>
           <span className="flex items-center gap-2">
             <span>↑↓ Navigate</span>

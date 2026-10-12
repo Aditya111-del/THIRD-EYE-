@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect, useRef } from "react";
 import type { Environment, Protocol, Session, TermLine, TerminalInstance } from "@/types/terminal";
-import { clearSessionDataCache } from "@/components/terminal/XtermView";
+import { clearSessionDataCache } from "@/components/terminal/terminalState";
 import { readFromClipboard } from "@/lib/clipboard";
 
 export const initialEnvs: Environment[] = [
@@ -18,8 +18,6 @@ export const initialEnvs: Environment[] = [
     ],
   },
 ];
-
-const seed: Record<string, TermLine[]> = {};
 
 function stripAnsi(str: string): string {
   if (typeof str !== "string") return "";
@@ -45,22 +43,26 @@ let counter = 0;
 export function makeSession(
   t: TerminalInstance,
   protocol: Protocol,
-  shellType: 'cmd' | 'powershell' = 'cmd'
+  shellType: 'cmd' | 'powershell' = 'cmd',
+  workspaceDir?: string
 ): Session {
   const sessionId = `s${++counter}`;
   const isSSH = protocol === "ssh";
   const isLocal = protocol === "local";
+  const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
   const resolvedType = t.shellType || shellType;
-  const shellName = resolvedType === "powershell" ? "Windows PowerShell" : "Command Prompt";
-  const shellExe = resolvedType === "powershell" ? "powershell.exe" : "cmd.exe";
+  const defaultShellName = isMac ? "zsh" : (resolvedType === "powershell" ? "Windows PowerShell" : "Command Prompt");
+  const shellName = t.name || defaultShellName;
+  const shellExe = resolvedType === "powershell" ? "powershell.exe" : (isMac ? "/bin/zsh" : "cmd.exe");
+  const projectDir = workspaceDir || (typeof window !== "undefined" ? (window as any).__THIRD_EYE_WORKSPACE_ROOT__ : "") || "/Users/adityasalgotra/Downloads/THIRD_EYE";
 
   return {
     id: sessionId,
     terminalId: t.id,
     title: t.name || shellName,
     protocol,
-    cwd: isLocal ? "C:\\Users\\aditya.s.ctr" : "~",
-    user: "aditya.s.ctr",
+    cwd: isLocal ? projectDir : "~",
+    user: isMac ? "adityasalgotra" : "aditya.s.ctr",
     shellType: resolvedType,
     shell: shellExe,
     lines: isSSH
@@ -68,7 +70,14 @@ export function makeSession(
           { kind: "info", text: `[THIRD EYE SSH] Session initialized for ${t.host}` },
           { kind: "info", text: `Connecting to ${t.host}...` },
         ]
-      : [],
+      : [
+          { kind: "input", text: "rakibulislam@panze-studio ~/universal-agent-skills (main) $ next dev" },
+          { kind: "out", text: "▲ Next.js 15.0.3" },
+          { kind: "out", text: "- Local: http://localhost:3000" },
+          { kind: "out", text: "✓ Ready in 1.2s" },
+          { kind: "out", text: "✓ Compiled /agents in 412ms" },
+          { kind: "input", text: "rakibulislam@panze-studio ~/universal-agent-skills (main) $ " },
+        ],
     currentPrompt: "",
     lastError: undefined,
     ptyId: sessionId,
@@ -96,36 +105,102 @@ export function useTerminalSession() {
   const [envs, setEnvs] = useState(initialEnvs);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeId, setActiveId] = useState<string>("");
+  const initialWorkspace = (typeof window !== "undefined" && (window as any).__THIRD_EYE_WORKSPACE_ROOT__) || "/Users/adityasalgotra/Downloads/THIRD_EYE";
+  const [workspaceRoot, setWorkspaceRoot] = useState<string>(initialWorkspace);
+
   const active = sessions.find((s) => s.id === activeId) ?? (sessions.length > 0 ? sessions[0] : undefined);
   const spawnedPtySet = useRef<Set<string>>(new Set());
   const lastCommandRef = useRef<{ cmd: string; time: number }>({ cmd: "", time: 0 });
+  const workspaceRootRef = useRef<string>(initialWorkspace);
+  const sessionsRef = useRef<Session[]>([]);
+  const activeIdRef = useRef<string>("");
+
+  sessionsRef.current = sessions;
+  activeIdRef.current = activeId;
+
+  // Synchronize workspace root on mount and listen to project switch events
+  useEffect(() => {
+    if (window.electronAPI?.fs?.getWorkspaceRoot) {
+      window.electronAPI.fs.getWorkspaceRoot().then((root: string) => {
+        if (root) {
+          (window as any).__THIRD_EYE_WORKSPACE_ROOT__ = root;
+          setWorkspaceRoot(root);
+          workspaceRootRef.current = root;
+          setSessions((prev) =>
+            prev.map((s) => (s.protocol === "local" ? { ...s, cwd: root } : s))
+          );
+        }
+      }).catch(() => {});
+    }
+
+    let unsub: (() => void) | undefined;
+    if (window.electronAPI?.workspace?.onRootChanged) {
+      unsub = window.electronAPI.workspace.onRootChanged((data: { root: string; name: string }) => {
+        if (data?.root) {
+          const newRoot = data.root;
+          console.log(`[useTerminalSession] Project switched to: ${newRoot}. Auto-directing terminal.`);
+          (window as any).__THIRD_EYE_WORKSPACE_ROOT__ = newRoot;
+          setWorkspaceRoot(newRoot);
+          workspaceRootRef.current = newRoot;
+
+          // 1. Update working directory on all local sessions
+          setSessions((prev) =>
+            prev.map((s) => (s.protocol === "local" ? { ...s, cwd: newRoot } : s))
+          );
+
+          // 2. Direct all active terminal processes directly into the new project directory
+          if (window.electronAPI?.terminal?.cd) {
+            window.electronAPI.terminal.cd({ dir: newRoot });
+          } else if (window.electronAPI?.terminal?.write) {
+            const term = window.electronAPI.terminal;
+            sessionsRef.current.forEach((s) => {
+              if (s.ptyId && s.protocol === "local") {
+                term.write(s.ptyId, `cd "${newRoot}"\r`);
+              }
+            });
+          }
+        }
+      });
+    }
+
+    return () => {
+      unsub?.();
+    };
+  }, []);
 
   // Spawn real PTY session for local shells
   const ensurePtySpawned = useCallback((sessionId: string, shellType: 'cmd' | 'powershell' = 'cmd') => {
     if (!window.electronAPI || spawnedPtySet.current.has(sessionId)) return;
     spawnedPtySet.current.add(sessionId);
 
+    const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
+    const targetCwd = workspaceRootRef.current || undefined;
+
     window.electronAPI.terminal.spawn({
       id: sessionId,
       shellType,
-      shell: shellType === 'powershell' ? 'powershell.exe' : 'cmd.exe',
+      shell: isMac ? '/bin/zsh' : (shellType === 'powershell' ? 'powershell.exe' : 'cmd.exe'),
+      cwd: targetCwd,
       cols: 120,
       rows: 24,
     }).then((res) => {
       if (res.success) {
-        setSessions((prev) => prev.map((s) => s.id === sessionId ? { ...s, ptyId: sessionId, cwd: res.cwd || s.cwd } : s));
+        setSessions((prev) => prev.map((s) => s.id === sessionId ? { ...s, ptyId: sessionId, cwd: res.cwd || targetCwd || s.cwd } : s));
       }
     }).catch((err) => {
       console.warn(`[useTerminalSession] Could not spawn PTY for ${sessionId}:`, err);
     });
   }, []);
 
-  // Hook into Electron PTY streaming data
+  // Hook into Electron PTY streaming data and AI error events (stable lifecycle)
   useEffect(() => {
     if (!window.electronAPI) return;
 
     const unsubscribeData = window.electronAPI.terminal.onData((payload) => {
-      const clean = stripAnsi(payload.data);
+      let rawClean = stripAnsi(payload.data);
+      // Strip initial zsh PROMPT_EOL_MARK sequence (% followed by padded spaces and \r)
+      rawClean = rawClean.replace(/^%[ ]{10,}\r[ ]*\r?/g, "");
+      const clean = rawClean;
       if (!clean) return;
 
       setSessions((prev) => prev.map((s) => {
@@ -144,46 +219,66 @@ export function useTerminalSession() {
           const lastMatch = promptMatches[promptMatches.length - 1];
           if (lastMatch && lastMatch[1]) {
             detectedCwd = lastMatch[1].trim();
-            // If connection closed or returned to Windows local prompt
             if (clean.includes("Connection to") || clean.includes("closed") || clean.includes("logout")) {
               detectedProtocol = "local";
             }
           }
         }
 
-        // Linux / SSH prompt: user@host:path$ or user@host:path# or [user@host path]$
+        // Linux / SSH prompt: user@host:path$ or user@host:path#
         const linuxMatches = [...clean.matchAll(/([a-zA-Z0-9._-]+)@([a-zA-Z0-9._-]+):([^\r\n$#>]*)[$#]/g)];
         if (linuxMatches.length > 0) {
           const lastLinux = linuxMatches[linuxMatches.length - 1];
-          if (lastLinux) {
+          if (lastLinux && lastLinux[1] && lastLinux[2]) {
             detectedUser = lastLinux[1];
             detectedIp = lastLinux[2];
             detectedCwd = lastLinux[3]?.trim() || "~";
             detectedProtocol = "ssh";
-            if (detectedTitle.startsWith("Command Prompt") || detectedTitle.startsWith("Windows PowerShell")) {
+            if (detectedTitle.startsWith("Command Prompt") || detectedTitle.startsWith("Windows PowerShell") || detectedTitle.startsWith("zsh")) {
               detectedTitle = `SSH: ${detectedUser}@${detectedIp}`;
             }
           }
         }
 
-        // 2. Normalize CRLF line endings (ConPTY / Windows emits \r\n or \r\r\n)
+        // macOS / zsh prompt: user@host dir % or dir %
+        const macMatches = [...clean.matchAll(/(?:([a-zA-Z0-9._-]+)@([a-zA-Z0-9._-]+)\s+)?([^\r\n%#$]+)\s+[%#$]/g)];
+        if (macMatches.length > 0) {
+          const lastMac = macMatches[macMatches.length - 1];
+          if (lastMac) {
+            if (lastMac[1]) detectedUser = lastMac[1];
+            if (lastMac[2]) detectedIp = lastMac[2];
+            if (lastMac[3]) {
+              const possibleCwd = lastMac[3].trim();
+              if (possibleCwd.startsWith("/")) {
+                detectedCwd = possibleCwd;
+              } else if (s.cwd && s.cwd.split("/").pop()?.trim() === possibleCwd) {
+                detectedCwd = s.cwd;
+              } else if (workspaceRootRef.current && workspaceRootRef.current.split("/").pop()?.trim() === possibleCwd) {
+                detectedCwd = workspaceRootRef.current;
+              } else if (typeof window !== "undefined" && (window as any).__THIRD_EYE_WORKSPACE_ROOT__ && (window as any).__THIRD_EYE_WORKSPACE_ROOT__.split("/").pop()?.trim() === possibleCwd) {
+                detectedCwd = (window as any).__THIRD_EYE_WORKSPACE_ROOT__;
+              }
+            }
+          }
+        }
+
+        // 2. Normalize CRLF line endings
         const normalizedChunk = clean.replace(/\r+\n/g, '\n');
 
         // 3. Accumulate stream chunks with active pending prompt
         let pending = (s.currentPrompt || "") + normalizedChunk;
 
-        // Decouple prompt from ANY preceding text in buffer
+        // Decouple prompt from preceding text in buffer
         pending = pending.replace(/([^\r\n])\s*((?:PS\s+)?[a-zA-Z]:\\[^<>:"/|?*\r\n]*>\s*)/g, "$1\n$2");
         pending = pending.replace(/([^\r\n])\s*([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+:[^$#\r\n]*[$#]\s*)/g, "$1\n$2");
+        pending = pending.replace(/([^\r\n])\s*([a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\s+[^%#$\r\n]*[%#$]\s*)/g, "$1\n$2");
 
         // 4. Split by newline
         const parts = pending.split('\n');
-
-        // All parts except the last one are completed lines
         const completedParts = parts.slice(0, -1);
         let newPrompt = parts[parts.length - 1] ?? "";
 
-        // 5. Clean standalone carriage returns (\r) without erasing content
+        // 5. Clean standalone carriage returns without erasing content
         const cleanCr = (t: string): string => {
           if (!t.includes('\r')) return t;
           const segments = t.split('\r').filter((seg) => seg.length > 0);
@@ -194,7 +289,7 @@ export function useTerminalSession() {
         newPrompt = cleanCr(newPrompt);
 
         // 6. Guarantee that newPrompt does NOT contain preceding banner lines
-        const promptMatch = newPrompt.match(/((?:PS\s+)?[a-zA-Z]:\\[^<>:"/|?*\r\n]*>\s*|[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+:[^$#\r\n]*[$#]\s*)$/);
+        const promptMatch = newPrompt.match(/((?:PS\s+)?[a-zA-Z]:\\[^<>:"/|?*\r\n]*>\s*|[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+:[^$#\r\n]*[$#]\s*|[a-zA-Z0-9._-]+@[a-zA-Z0-9._-]+\s+[^%#$\r\n]*[%#$]\s*)$/);
         if (promptMatch && promptMatch.index !== undefined && promptMatch.index > 0) {
           const preceding = newPrompt.slice(0, promptMatch.index).trim();
           const actualPrompt = newPrompt.slice(promptMatch.index);
@@ -204,15 +299,16 @@ export function useTerminalSession() {
           newPrompt = actualPrompt;
         }
 
-        // 7. Retain all lines including echoed command so AI has full context of executed command
-        const finalCompleted = processedCompleted;
-
-        // 8. Filter out excessive consecutive blank lines
+        // 7. Filter out excessive consecutive blank lines and standalone zsh PROMPT_EOL_MARK artifacts
         const cleanedLines: string[] = [];
-        for (const line of finalCompleted) {
-          if (line.trim() === "") {
+        for (const line of processedCompleted) {
+          const trimmed = line.trim();
+          if (trimmed === "%" || trimmed === "#" || trimmed === "$") {
+            continue; // Filter isolated shell EOL marker / prompt artifacts
+          }
+          if (trimmed === "") {
             if (cleanedLines.length > 0 && cleanedLines[cleanedLines.length - 1]?.trim() === "") {
-              continue; // Avoid consecutive blank lines
+              continue;
             }
           }
           cleanedLines.push(line);
@@ -244,8 +340,9 @@ export function useTerminalSession() {
 
     // Listen to background AI error detection events
     const unsubscribeError = window.electronAPI.ai.onErrorDetected((event) => {
+      const curActiveId = activeIdRef.current;
       setSessions((prev) => prev.map((s) => {
-        if (s.id === event.terminalId || s.id === activeId) {
+        if (s.id === event.terminalId || s.id === curActiveId) {
           return {
             ...s,
             lastError: `${event.errorSummary}: ${event.snippet}`,
@@ -259,20 +356,21 @@ export function useTerminalSession() {
       unsubscribeData();
       unsubscribeError();
     };
-  }, [activeId]);
+  }, []);
 
   // Create and launch a new terminal session
   const createTerminal = useCallback((type: 'cmd' | 'powershell' = 'cmd', meta?: Partial<Session> & { initialCommand?: string }) => {
+    const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
     const id = `term-${Date.now()}`;
-    const name = type === 'powershell' ? 'Windows PowerShell' : 'Command Prompt';
+    const defaultShell = isMac ? 'zsh' : (type === 'powershell' ? 'PowerShell' : 'cmd');
     const newTerm: TerminalInstance = {
       id,
-      name: meta?.title || `${name} #${sessions.length + 1}`,
+      name: meta?.title || (sessionsRef.current.length === 0 ? defaultShell : `${defaultShell} #${sessionsRef.current.length + 1}`),
       host: meta?.ip || (type === 'powershell' ? 'powershell@localhost' : 'cmd@localhost'),
       shellType: type,
     };
 
-    const s = makeSession(newTerm, meta?.protocol || 'local', type);
+    const s = makeSession(newTerm, meta?.protocol || 'local', type, workspaceRootRef.current);
     if (meta?.title) s.title = meta.title;
     if (meta?.ip) s.ip = meta.ip;
     if (meta?.user) s.user = meta.user;
@@ -296,7 +394,7 @@ export function useTerminalSession() {
       return e;
     }));
 
-    setSessions((prev) => [...prev, s]);
+    setSessions((prev) => (prev.some((x) => x.id === s.id) ? prev : [...prev, s]));
     setActiveId(s.id);
     clearSessionDataCache(s.id);
     clearSessionDataCache(id);
@@ -304,15 +402,19 @@ export function useTerminalSession() {
     // Spawn real PTY session
     if (window.electronAPI) {
       spawnedPtySet.current.add(s.id);
+      const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
+      const targetCwd = workspaceRootRef.current || s.cwd;
+
       window.electronAPI.terminal.spawn({
         id: s.id,
         shellType: type,
-        shell: type === 'powershell' ? 'powershell.exe' : 'cmd.exe',
+        shell: isMac ? '/bin/zsh' : (type === 'powershell' ? 'powershell.exe' : 'cmd.exe'),
+        cwd: targetCwd,
         cols: 120,
         rows: 24,
       }).then((res) => {
         if (res.success) {
-          setSessions((prev) => prev.map((item) => item.id === s.id ? { ...item, ptyId: s.id, cwd: res.cwd || item.cwd } : item));
+          setSessions((prev) => prev.map((item) => item.id === s.id ? { ...item, ptyId: s.id, cwd: res.cwd || targetCwd || item.cwd } : item));
         }
         if (meta?.initialCommand) {
           setTimeout(() => {
@@ -325,7 +427,7 @@ export function useTerminalSession() {
         console.warn(`[useTerminalSession] Could not spawn PTY for ${s.id}:`, err);
       });
     }
-  }, [sessions.length]);
+  }, []);
 
   const connectSsh = useCallback((options: {
     title: string;
@@ -358,11 +460,10 @@ export function useTerminalSession() {
         ensurePtySpawned(existing.id, existing.shellType);
         return prev;
       }
-      const s = makeSession(t, protocol, t.shellType || 'cmd');
+      const s = makeSession(t, protocol, t.shellType || 'cmd', workspaceRootRef.current);
       setActiveId(s.id);
       ensurePtySpawned(s.id, t.shellType);
 
-      // If SSH protocol, automatically trigger SSH connection command into the shell after spawn
       if (protocol === "ssh" && t.host && t.host !== "local@host") {
         setTimeout(() => {
           if (window.electronAPI) {
@@ -376,14 +477,22 @@ export function useTerminalSession() {
   }, [ensurePtySpawned]);
 
   const closeSession = useCallback((id: string) => {
+    const targetSession = sessionsRef.current.find((s) => s.id === id);
+    const terminalIdToRemove = targetSession?.terminalId || id;
+    const ptyIdToKill = targetSession?.ptyId || id;
+
     if (window.electronAPI) {
-      window.electronAPI.terminal.kill(id);
+      window.electronAPI.terminal.kill(ptyIdToKill);
+      spawnedPtySet.current.delete(ptyIdToKill);
       spawnedPtySet.current.delete(id);
     }
+    clearSessionDataCache(id);
+    clearSessionDataCache(ptyIdToKill);
+
     setSessions((prev) => {
       const next = prev.filter((s) => s.id !== id);
       if (next.length) {
-        if (id === activeId) setActiveId(next[next.length - 1]!.id);
+        if (id === activeIdRef.current) setActiveId(next[next.length - 1]!.id);
       } else {
         setActiveId("");
       }
@@ -398,34 +507,43 @@ export function useTerminalSession() {
             ...e.services[0],
             id: e.services[0]?.id || "shells",
             name: e.services[0]?.name || "Terminal Shells",
-            terminals: e.services[0]?.terminals.filter((t) => t.id !== id) || [],
+            terminals: e.services[0]?.terminals.filter((t) => t.id !== id && t.id !== terminalIdToRemove) || [],
           }],
         };
       }
       return e;
     }));
-  }, [activeId]);
+  }, []);
 
   const execute = useCallback((cmd: string) => {
     const trimmed = cmd.trim();
-    const currentSession = sessions.find((s) => s.id === activeId);
+    const curActiveId = activeIdRef.current;
+    const currentSession = sessionsRef.current.find((s) => s.id === curActiveId) || sessionsRef.current[0];
     if (!currentSession) return;
 
+    const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.userAgent);
     const isPowerShell = currentSession.shellType === "powershell";
-    const defaultPrompt = isPowerShell
-      ? `PS ${currentSession.cwd || "C:\\Users\\aditya.s.ctr"}> `
-      : `${currentSession.cwd || "C:\\Users\\aditya.s.ctr"}>`;
+    const defaultUser = isMac ? "adityasalgotra" : "aditya.s.ctr";
+    const defaultCwd = workspaceRootRef.current || currentSession.cwd || (isMac ? "/Users/adityasalgotra/Downloads/THIRD_EYE" : "C:\\Users\\aditya.s.ctr");
+    const defaultPrompt = isMac
+      ? `${defaultUser} ${defaultCwd.split("/").pop() || "workspace"} % `
+      : isPowerShell
+      ? `PS ${defaultCwd}> `
+      : `${defaultCwd}>`;
     const promptText = (currentSession.currentPrompt && currentSession.currentPrompt.trim().length > 0)
       ? currentSession.currentPrompt.trimEnd()
       : defaultPrompt;
 
+    const targetPtyId = currentSession.ptyId || currentSession.id;
+
     if (trimmed === "clear" || trimmed === "cls") {
-      clearSessionDataCache(currentSession.ptyId);
+      clearSessionDataCache(targetPtyId);
       clearSessionDataCache(currentSession.id);
-      if (window.electronAPI && currentSession.ptyId) {
-        window.electronAPI.terminal.write(currentSession.ptyId, "cls\r\n");
+      if (window.electronAPI && targetPtyId) {
+        const isWin = typeof navigator !== "undefined" && !/mac|linux/i.test(navigator.userAgent);
+        window.electronAPI.terminal.write(targetPtyId, isWin ? "cls\r\n" : "clear\r\n");
       }
-      setSessions((prev) => prev.map((s) => s.id === activeId ? {
+      setSessions((prev) => prev.map((s) => s.id === currentSession.id ? {
         ...s,
         lines: [],
         currentPrompt: promptText,
@@ -436,9 +554,9 @@ export function useTerminalSession() {
 
     lastCommandRef.current = { cmd: trimmed, time: Date.now() };
 
-    // Commit command line immediately so what the user typed is NEVER lost or delayed!
+    // Commit command line immediately so what the user typed is never lost or delayed
     setSessions((prev) => prev.map((s) => {
-      if (s.id !== activeId) return s;
+      if (s.id !== currentSession.id) return s;
       return {
         ...s,
         lines: [...s.lines, { kind: "input" as const, text: `${promptText} ${cmd}` }],
@@ -447,8 +565,8 @@ export function useTerminalSession() {
     }));
 
     // Real Electron PTY execution
-    if (window.electronAPI && currentSession.ptyId) {
-      window.electronAPI.terminal.write(currentSession.ptyId, `${cmd}\r\n`);
+    if (window.electronAPI && targetPtyId) {
+      window.electronAPI.terminal.write(targetPtyId, `${cmd}\r\n`);
       return;
     }
 
@@ -457,49 +575,57 @@ export function useTerminalSession() {
       fetch("http://localhost:4001/api/pty/write", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: currentSession.id, data: `${cmd}\r\n` }),
+        body: JSON.stringify({ id: targetPtyId, data: `${cmd}\r\n` }),
       }).catch(() => {});
     } catch {
       // Microservice not running, proceed to mock
     }
 
     const r = runMock(cmd, currentSession);
-    setSessions((prev) => prev.map((s) => s.id === activeId ? {
+    setSessions((prev) => prev.map((s) => s.id === currentSession.id ? {
       ...s,
       lines: [...s.lines, ...r.lines],
       cwd: r.cwd ?? s.cwd,
       currentPrompt: `${r.cwd ?? s.cwd}>`,
       lastError: r.error ?? (r.lines.some((l) => l.kind === "success") ? undefined : s.lastError),
     } : s));
-  }, [activeId, sessions]);
+  }, []);
 
   const dismissError = useCallback(() => {
-    setSessions((prev) => prev.map((s) => s.id === activeId ? { ...s, lastError: undefined } : s));
-  }, [activeId]);
+    const curActiveId = activeIdRef.current;
+    setSessions((prev) => prev.map((s) => s.id === curActiveId ? { ...s, lastError: undefined } : s));
+  }, []);
 
   const killAndRestart = useCallback(async () => {
-    const current = sessions.find((s) => s.id === activeId);
+    const curActiveId = activeIdRef.current;
+    const current = sessionsRef.current.find((s) => s.id === curActiveId);
     if (!current) return;
 
-    if (window.electronAPI && current.ptyId) {
-      // Cleanly terminate active shell process and flush cache
-      clearSessionDataCache(current.ptyId);
+    const targetPtyId = current.ptyId || current.id;
+    if (window.electronAPI && targetPtyId) {
+      clearSessionDataCache(targetPtyId);
       clearSessionDataCache(current.id);
-      await window.electronAPI.terminal.kill(current.ptyId);
-      spawnedPtySet.current.delete(current.ptyId);
+      await window.electronAPI.terminal.kill(targetPtyId);
+      spawnedPtySet.current.delete(targetPtyId);
 
-      // Respawn fresh shell
+      const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
+      const targetCwd = workspaceRootRef.current || current.cwd;
+
+      // Respawn fresh shell directly in project root
       const res = await window.electronAPI.terminal.spawn({
-        id: current.ptyId,
+        id: targetPtyId,
         shellType: current.shellType,
-        shell: current.shellType === 'powershell' ? 'powershell.exe' : 'cmd.exe',
+        shell: isMac ? '/bin/zsh' : (current.shellType === 'powershell' ? 'powershell.exe' : 'cmd.exe'),
+        cwd: targetCwd,
         cols: 120,
         rows: 24,
       });
-      setSessions((prev) => prev.map((s) => s.id === activeId ? {
+      spawnedPtySet.current.add(targetPtyId);
+
+      setSessions((prev) => prev.map((s) => s.id === curActiveId ? {
         ...s,
         lastError: undefined,
-        cwd: res.cwd || s.cwd,
+        cwd: res.cwd || targetCwd || s.cwd,
         lines: [],
         currentPrompt: "",
       } : s));
@@ -507,53 +633,59 @@ export function useTerminalSession() {
     }
 
     // Mock browser fallback
-    setSessions((prev) => prev.map((s) => s.id !== activeId ? s : {
+    setSessions((prev) => prev.map((s) => s.id !== curActiveId ? s : {
       ...s, lastError: undefined,
       lines: [],
     }));
-  }, [activeId, sessions]);
+  }, []);
 
   const toggleShellType = useCallback(async () => {
-    const current = sessions.find((s) => s.id === activeId);
+    const curActiveId = activeIdRef.current;
+    const current = sessionsRef.current.find((s) => s.id === curActiveId);
     if (!current) return;
 
     const nextType: 'cmd' | 'powershell' = current.shellType === 'powershell' ? 'cmd' : 'powershell';
-    const nextShellName = nextType === 'powershell' ? 'Windows PowerShell' : 'Command Prompt';
+    const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
+    const nextShellName = isMac ? 'zsh' : (nextType === 'powershell' ? 'Windows PowerShell' : 'Command Prompt');
+    const targetCwd = workspaceRootRef.current || current.cwd;
+    const targetPtyId = current.ptyId || current.id;
 
-    if (window.electronAPI && current.ptyId) {
-      await window.electronAPI.terminal.kill(current.ptyId);
-      spawnedPtySet.current.delete(current.ptyId);
+    if (window.electronAPI && targetPtyId) {
+      await window.electronAPI.terminal.kill(targetPtyId);
+      spawnedPtySet.current.delete(targetPtyId);
 
       const res = await window.electronAPI.terminal.spawn({
-        id: current.ptyId,
+        id: targetPtyId,
         shellType: nextType,
-        shell: nextType === 'powershell' ? 'powershell.exe' : 'cmd.exe',
+        shell: isMac ? '/bin/zsh' : (nextType === 'powershell' ? 'powershell.exe' : 'cmd.exe'),
+        cwd: targetCwd,
         cols: 120,
         rows: 24,
       });
+      spawnedPtySet.current.add(targetPtyId);
 
-      setSessions((prev) => prev.map((s) => s.id === activeId ? {
+      setSessions((prev) => prev.map((s) => s.id === curActiveId ? {
         ...s,
         shellType: nextType,
-        shell: nextType === 'powershell' ? 'powershell.exe' : 'cmd.exe',
-        title: `${nextShellName} #${sessions.findIndex((x) => x.id === activeId) + 1 || 1}`,
+        shell: isMac ? '/bin/zsh' : (nextType === 'powershell' ? 'powershell.exe' : 'cmd.exe'),
+        title: `${nextShellName} #${sessionsRef.current.findIndex((x) => x.id === curActiveId) + 1 || 1}`,
         lastError: undefined,
-        cwd: res.cwd || s.cwd,
+        cwd: res.cwd || targetCwd || s.cwd,
         lines: [],
         currentPrompt: "",
       } : s));
       return;
     }
 
-    setSessions((prev) => prev.map((s) => s.id === activeId ? {
+    setSessions((prev) => prev.map((s) => s.id === curActiveId ? {
       ...s,
       shellType: nextType,
-      shell: nextType === 'powershell' ? 'powershell.exe' : 'cmd.exe',
-      title: `${nextShellName} #${sessions.findIndex((x) => x.id === activeId) + 1 || 1}`,
+      shell: isMac ? '/bin/zsh' : (nextType === 'powershell' ? 'powershell.exe' : 'cmd.exe'),
+      title: `${nextShellName} #${sessionsRef.current.findIndex((x) => x.id === curActiveId) + 1 || 1}`,
       lastError: undefined,
       lines: [],
     } : s));
-  }, [activeId, sessions]);
+  }, []);
 
   const addEnvironment = useCallback((protocol: Protocol, name: string, host: string) => {
     const id = `env-${Date.now()}`;
@@ -575,12 +707,39 @@ export function useTerminalSession() {
 
   const write = useCallback((text: string) => {
     if (!text) return;
-    const currentSession = sessions.find((s) => s.id === activeId);
+    const curActiveId = activeIdRef.current;
+    const currentSession = sessionsRef.current.find((s) => s.id === curActiveId) || sessionsRef.current[0];
     if (!currentSession) return;
-    if (window.electronAPI && currentSession.ptyId) {
-      window.electronAPI.terminal.write(currentSession.ptyId, text);
+    const targetId = currentSession.ptyId || currentSession.id;
+    if (window.electronAPI && targetId) {
+      window.electronAPI.terminal.write(targetId, text);
     }
-  }, [sessions, activeId]);
+  }, []);
+
+  const cdToDirectory = useCallback((dir: string) => {
+    if (!dir) return;
+    const curActiveId = activeIdRef.current;
+    const targetSession = sessionsRef.current.find((s) => s.id === curActiveId) || sessionsRef.current[0];
+    const targetPtyId = targetSession?.ptyId || targetSession?.id;
+
+    if (window.electronAPI?.terminal?.cd) {
+      window.electronAPI.terminal.cd({ ...(targetPtyId ? { id: targetPtyId } : {}), dir });
+    } else if (targetPtyId && window.electronAPI) {
+      window.electronAPI.terminal.write(targetPtyId, `cd "${dir}"\r`);
+    }
+
+    workspaceRootRef.current = dir;
+    setWorkspaceRoot(dir);
+    if (typeof window !== "undefined") {
+      (window as any).__THIRD_EYE_WORKSPACE_ROOT__ = dir;
+    }
+
+    if (targetSession) {
+      setSessions((prev) =>
+        prev.map((s) => (s.id === targetSession.id ? { ...s, cwd: dir } : s))
+      );
+    }
+  }, []);
 
   const lastSessionPasteRef = useRef<{ text: string; time: number }>({ text: '', time: 0 });
 
@@ -609,6 +768,8 @@ export function useTerminalSession() {
     closeSession,
     execute,
     write,
+    cdToDirectory,
+    workspaceRoot,
     pasteFromClipboard,
     killAndRestart,
     toggleShellType,

@@ -1,0 +1,370 @@
+{
+  "messages": [
+    {
+      "role": "user",
+      "content": "check this complete project and tell me what its purpose and architecture is"
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "listDir",
+            "args": {
+              "dirPath": ".",
+              "maxDepth": 2
+            },
+            "id": "call_1709048"
+          },
+          "thoughtSignature": "EmAKXgFpFH0TCv1nw4XoKfVFJ/o4lv74TcpepziGslTrZ98uQSsqxpAr2xiYDDqcgj5H25DDvL5TFD4ISsXIn8KbjgIZh1qzP71nS1ISeu4FUriJODXTaY3iifBFSwXmiwo="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1709048",
+          "name": "listDir",
+          "args": {
+            "dirPath": ".",
+            "maxDepth": 2
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "listDir",
+      "toolCallId": "call_1709048",
+      "content": {
+        "dir": ".",
+        "entries": [
+          {
+            "name": ".env",
+            "relativePath": ".env",
+            "isDirectory": false
+          },
+          {
+            "name": ".env.example",
+            "relativePath": ".env.example",
+            "isDirectory": false
+          },
+          {
+            "name": ".gitignore",
+            "relativePath": ".gitignore",
+            "isDirectory": false
+          },
+          {
+            "name": ".third-eye",
+            "relativePath": ".third-eye",
+            "isDirectory": true
+          },
+          {
+            "name": "checkpoints",
+            "relativePath": ".third-eye/checkpoints",
+            "isDirectory": true
+          },
+          {
+            "name": "Frontend",
+            "relativePath": "Frontend",
+            "isDirectory": true
+          },
+          {
+            "name": "guide-build-main",
+            "relativePath": "Frontend/guide-build-main",
+            "isDirectory": true
+          },
+          {
+            "name": "tsconfig.json",
+            "relativePath": "Frontend/tsconfig.json",
+            "isDirectory": false
+          },
+          {
+            "name": "README.md",
+            "relativePath": "README.md",
+            "isDirectory": false
+          },
+          {
+            "name": "backend",
+            "relativePath": "backend",
+            "isDirectory": true
+          },
+          {
+            "name": "ai-service",
+            "relativePath": "backend/ai-service",
+            "isDirectory": true
+          },
+          {
+            "name": "pty-service",
+            "relativePath": "backend/pty-service",
+            "isDirectory": true
+          },
+          {
+            "name": "salesforce-service",
+            "relativePath": "backend/salesforce-service",
+            "isDirectory": true
+          },
+          {
+            "name": "docs",
+            "relativePath": "docs",
+            "isDirectory": true
+          },
+          {
+            "name": "AGENT.md",
+            "relativePath": "docs/AGENT.md",
+            "isDirectory": false
+          },
+          {
+            "name": "ARCHITECTURE.md",
+            "relativePath": "docs/ARCHITECTURE.md",
+            "isDirectory": false
+          },
+          {
+            "name": "MIGRATION_LOG.md",
+            "relativePath": "docs/MIGRATION_LOG.md",
+            "isDirectory": false
+          },
+          {
+            "name": "electron",
+            "relativePath": "electron",
+            "isDirectory": true
+          },
+          {
+            "name": "aiEngine.js",
+            "relativePath": "electron/aiEngine.js",
+            "isDirectory": false
+          },
+          {
+            "name": "connecting.html",
+            "relativePath": "electron/connecting.html",
+            "isDirectory": false
+          },
+          {
+            "name": "init_shell.bat",
+            "relativePath": "electron/init_shell.bat",
+            "isDirectory": false
+          },
+          {
+            "name": "main.js",
+            "relativePath": "electron/main.js",
+            "isDirectory": false
+          },
+          {
+            "name": "preload.js",
+            "relativePath": "electron/preload.js",
+            "isDirectory": false
+          },
+          {
+            "name": "ptyManager.js",
+            "relativePath": "electron/ptyManager.js",
+            "isDirectory": false
+          },
+          {
+            "name": "package-lock.json",
+            "relativePath": "package-lock.json",
+            "isDirectory": false
+          },
+          {
+            "name": "package.json",
+            "relativePath": "package.json",
+            "isDirectory": false
+          },
+          {
+            "name": "packages",
+            "relativePath": "packages",
+            "isDirectory": true
+          },
+          {
+            "name": "shared",
+            "relativePath": "packages/shared",
+            "isDirectory": true
+          },
+          {
+            "name": "push_to_github.bat",
+            "relativePath": "push_to_github.bat",
+            "isDirectory": false
+          },
+          {
+            "name": "push_to_github.ps1",
+            "relativePath": "push_to_github.ps1",
+            "isDirectory": false
+          },
+          {
+            "name": "scripts",
+            "relativePath": "scripts",
+            "isDirectory": true
+          },
+          {
+            "name": "smoke-test.js",
+            "relativePath": "scripts/smoke-test.js",
+            "isDirectory": false
+          },
+          {
+            "name": "start.bat",
+            "relativePath": "start.bat",
+            "isDirectory": false
+          },
+          {
+            "name": "start.ps1",
+            "relativePath": "start.ps1",
+            "isDirectory": false
+          }
+        ],
+        "totalEntries": 34,
+        "truncated": false
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "readFile",
+            "args": {
+              "path": "README.md"
+            },
+            "id": "call_1342401"
+          },
+          "thoughtSignature": "EmAKXgFpFH0TC9MWbQ71WeNCxYt9YTUjEt63axPLwxBuSWt0dZQTch7v2OLLaADcPHpTvyEDeStdnAZXtZOxETt1fuiTAU7IL5lm2WwzOVZezGIqgFIIE4vRyTSHhnKJs8g="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1342401",
+          "name": "readFile",
+          "args": {
+            "path": "README.md"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "readFile",
+      "toolCallId": "call_1342401",
+      "content": {
+        "path": "README.md",
+        "content": "1: # THIRD EYE — Industry-Grade Agentic IDE\n2: \n3: **THIRD EYE** is a high-performance, enterprise-grade, AI-native Integrated Development Environment (IDE) architected with a decoupled 4-process topology. It unifies terminal multiplexing, Monaco editor workflows, file system virtualization, and an autonomous coding agent loop with side-effect transparency.\n4: \n5: ---\n6: \n7: ## 🏗️ 4-Process System Architecture\n8: \n9: ```text\n10: THIRD_EYE/\n11: ├── package.json                         # Monorepo workspaces: packages/*, Frontend/*, backend/*\n12: ├── packages/\n13: │   └── shared/                          # ★ CONTRACT LAYER (@third-eye/shared)\n14: │       ├── src/ipc.ts                   # Channel constants + typed Request/Response signatures\n15: │       ├── src/tools.ts                 # Tool schemas, parameters, and risk classifications\n16: │       ├── src/events.ts                # Streaming terminal, file watch, and agent events\n17: │       ├── src/agent.ts                 # Message turns, tool calls, checkpoints, context envelopes\n18: │       └── src/permissions.ts           # Permission requests, decisions, and auto-allow policy\n19: │\n20: ├── electron/                            # 🖥️ DESKTOP WRAPPER (Electron Main Process)\n21: │   ├── main.js                          # Window manager, chokidar file watcher, typed IPC router\n22: │   ├── preload.js                       # Secure ContextBridge exposing window.thirdEye & legacy adapters\n23: │   ├── ptyManager.js                    # Native PTY engine adapter\n24: │   └── aiEngine.js                      # Legacy adapter for backward compatibility\n25: │\n26: ├── Frontend/guide-build-main/           # 🎨 RENDERER PROCESS (React 18 + TanStack + Monaco)\n27: │   ├── src/editor/                      # ★ In-Memory File Model Registry & Diff Preview\n28: │   │   ├── fileModels.ts                # In-memory models, versioning, external watch sync\n29: │   │   └── diffPreview/                 # Monaco Diff Editor for AI proposed hunk reviews\n30: │   ├── src/components/ai-assistant/     # AI Sidecar with Slash Commands & Checkpoint Restore\n31: │   ├── src/components/terminal/         # High-performance xterm.js terminal integration\n32: │   └── src/hooks/useEditorWorkspace.ts  # Workspace models & diff review actions\n33: │\n34: ├── backend/\n35: │   ├── pty-service/                     # ⚙️ PTY MICROSERVICE (Port 4001)\n36: │   │   ├── src/sessionRegistry.ts       # Session coordinator (id → process, cwd, shell)\n37: │   │   ├── src/outputBus.ts             # 10,000-line circular ring buffer for late subscribers\n38: │   │   ├── src/shellIntegration.ts      # OSC 633 & OSC 7 sequence parser (cwd & exit code tracking)\n39: │   │   └── src/server.ts                # REST & WebSocket streaming server\n40: │   │\n41: │   ├── ai-service/                      # 🧠 AI AGENT MICROSERVICE (Port 4002)\n42: │   │   ├── src/loop.ts                  # ★ Autonomous 5-Step Agent Loop (max 25 iterations)\n43: │   │   ├── src/tools/                   # Tool registry (readFile, writeFile, editFile, searchCode, runTerminal)\n44: │   │   ├── src/context/                 # Context engineering (repoMap, chunker, retriever, budgetManager, compaction)\n45: │   │   ├── src/tools/checkpoints.ts     # Content-hash snapshot store for 1-click rollback\n46: │   │   └── src/tools/permissions.ts     # Policy engine enforcing user permission decisions\n47: │   │\n48: │   └── salesforce-service/              # ☁️ SALESFORCE INTEGRATION MICROSERVICE (Port 4003)\n49: │\n50: ├── scripts/\n51: │   └── smoke-test.js                    # Automated E2E smoke test verifying all 4 processes\n52: └── docs/\n53:     ├── ARCHITECTURE.md                  # Comprehensive process map, data flows, and IPC contracts\n54:     ├── AGENT.md                         # Autonomous agent mental model, loop, and budget policy\n55:     └── MIGRATION_LOG.md                 # Complete record of all migration phases (0 through 7)\n56: ```\n57: \n58: ---\n59: \n60: ## ⚡ Non-Negotiable Hard Constraints Enforced\n61: \n62: 1. **Zero Ground-Up Rewrite**: Incremental migration preserving all existing features behind typed contracts.\n63: 2. **4-Process Architecture**: Strict separation of Electron Main | Renderer | pty-service | ai-service.\n64: 3. **Typed Contracts Everywhere**: Inter-process communication strictly mediated by `@third-eye/shared`. No untyped string IPC.\n65: 4. **File Model Service**: Every agent write/edit routes through in-memory models and produces reviewable Monaco diff previews before persistent disk writes.\n66: 5. **Tool Permissions**: Every terminal command requires explicit permission decision unless matching the auto-allow list (`git status`, `ls`, `pwd`, etc.).\n67: 6. **Side-Effect Transparency & Checkpoints**: Content-hash snapshots recorded prior to each mutation, enabling single-click \"Revert All AI Changes\".\n68: \n69: ---\n70: \n71: ## 🚀 Running THIRD EYE\n72: \n73: ### 1. Environment Configuration\n74: Verify your [`.env`](file:///Users/adityasalgotra/Downloads/THIRD_EYE/.env) in the root directory:\n75: ```env\n76: GEMINI_API_KEY=your_gemini_api_key_here\n77: GEMINI_MODEL=gemini-3.5-flash\n78: # Optional OpenAI fallback\n79: OPENAI_API_KEY=your_openai_api_key_here\n80: ```\n81: \n82: ### 2. Build Workspaces\n83: ```bash\n84: # Build the contract layer\n85: npm run build:shared\n86: \n87: # Run the end-to-end smoke test\n88: npm run smoke\n89: ```\n90: \n91: ### 3. Launch Development Stack\n92: ```bash\n93: npm run dev\n94: ```\n95: Starts all 4 services concurrently:\n96: - **PTY Service**: `http://localhost:4001` (WebSocket: `ws://localhost:4001/pty/stream`)\n97: - **AI Agent Service**: `http://localhost:4002`\n98: - **Salesforce Service**: `http://localhost:4003`\n99: - **Frontend Web App**: `http://localhost:3000`\n100: - **Electron Client**: Native desktop application with typed `window.thirdEye` bridge.\n101: ",
+        "totalLines": 101,
+        "startLine": 1,
+        "endLine": 101,
+        "truncated": false
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "readFile",
+            "args": {
+              "path": "docs/ARCHITECTURE.md"
+            },
+            "id": "call_1081935"
+          },
+          "thoughtSignature": "EmAKXgFpFH0TcKYmQb/lr5wJz45zEVTIWu4zKTjGJGG2eyFPGaBYPZ7LgS3rWzLerA/kknINEIi2dx1AsEc1LmTj6lPZg/w/BaEYCaPEdOhBA3xNFS69U/It5w4HdBrPTjo="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1081935",
+          "name": "readFile",
+          "args": {
+            "path": "docs/ARCHITECTURE.md"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "readFile",
+      "toolCallId": "call_1081935",
+      "content": {
+        "path": "docs/ARCHITECTURE.md",
+        "content": "1: # THIRD_EYE Architecture Specification\n2: \n3: ## 1. System Overview\n4: THIRD_EYE is an industry-grade, AI-native agentic Integrated Development Environment (IDE) architected with a decoupled 4-process topology. It unifies high-performance terminal multiplexing, Monaco editor workflows, file system virtualization, and an autonomous LLM coding agent loop.\n5: \n6: ```mermaid\n7: graph TD\n8:     subgraph UI_Layer [\"Renderer Process (React + TanStack + Monaco)\"]\n9:         WB[\"Workbench Grid / Shell Layout\"]\n10:         ED[\"EditorHost (Monaco + Diff Preview)\"]\n11:         FMS[\"File Model Registry (In-Memory)\"]\n12:         TM[\"TerminalHost (xterm.js)\"]\n13:         EXP[\"Explorer Tree (Virtualized)\"]\n14:         CP[\"AI Sidecar / Chat Panel\"]\n15:         TC[\"Typed Bridge Client (window.thirdEye)\"]\n16:     end\n17: \n18:     subgraph Desktop_Core [\"Electron Main Process\"]\n19:         IPC[\"Typed IPC Router (packages/shared)\"]\n20:         WIN[\"Window Manager & Lifecycle\"]\n21:         FW[\"File Watcher (chokidar)\"]\n22:         PTYM[\"PTY Native Adapter\"]\n23:         CLIP[\"Clipboard & Dialog Services\"]\n24:     end\n25: \n26:     subgraph Service_Mesh [\"Backend Microservices\"]\n27:         PTYS[\"PTY Service (:4001)<br/>Session Registry + OutputBus Ring Buffer\"]\n28:         AIS[\"AI Agent Service (:4002)<br/>Loop + Tool Registry + Context Engine + Checkpoints\"]\n29:         SFS[\"Salesforce Integration Service (:4003)\"]\n30:     end\n31: \n32:     TC <==> |Preload contextBridge| IPC\n33:     IPC <==> |Internal IPC / Stream| FW\n34:     IPC <==> |TCP / WebSocket| PTYS\n35:     IPC <==> |HTTP / SSE EventBus| AIS\n36:     AIS <==> |Tool: runTerminal| PTYS\n37:     AIS <==> |Tool: Salesforce| SFS\n38:     ED <==> FMS\n39: ```\n40: \n41: ---\n42: \n43: ## 2. Process Architecture\n44: \n45: | Process | Runtime | Primary Responsibilities | Network / IPC Boundaries |\n46: | :--- | :--- | :--- | :--- |\n47: | **Electron Main** | Node.js (Electron 29) | Native OS windowing, file watcher, native dialogs, IPC routing | Preload bridge `window.thirdEye` |\n48: | **Renderer** | React 18 / Vite / TanStack | Workbench layout, Monaco editor, in-memory file models, xterm.js terminals, Agent chat UI | `window.thirdEye` typed contract |\n49: | **PTY Service** | Node.js (:4001) | `node-pty` process orchestration, 10,000-line circular ring buffer (`outputBus`), shell integration (OSC parsing) | WebSocket `/pty/stream` + REST |\n50: | **AI Agent Service** | Node.js (:4002) | Autonomous loop (`loop.ts`), tool registry, context budgeting, AST repo-map, checkpoints | HTTP REST + SSE streaming |\n51: | **Salesforce Service** | Node.js (:4003) | SOQL querying, apex inspection, Salesforce metadata deployment | HTTP REST |\n52: \n53: ---\n54: \n55: ## 3. The Contract Layer (`packages/shared`)\n56: All inter-process communication is governed by typed schemas in `@third-eye/shared`:\n57: - `ipc.ts`: Channel constants and typed Request/Response signatures.\n58: - `tools.ts`: Tool declarations, risk levels (`low`, `medium`, `high`), and parameter schemas.\n59: - `events.ts`: Event delta schemas for terminal data, file watcher events, agent token deltas, and background tasks.\n60: - `agent.ts`: Unified envelope, message turns, tool invocations, results, and checkpoints.\n61: - `permissions.ts`: Decision engine types (`allow_once`, `allow_session`, `reject`).\n62: \n63: ---\n64: \n65: ## 4. The Agentic Flow (`loop.ts`)\n66: The AI coding agent loop in `backend/ai-service/src/loop.ts` follows a strict 5-stage state machine:\n67: 1. **Context Construction**: Assembles system prompt, workspace repo-map summary, active Monaco tab + selection, file chunk retriever results, recent terminal tail (last 200 lines), and conversation history. Enforces strict token budgets.\n68: 2. **Model Streaming**: Streams LLM generation. Emits text deltas in real-time via SSE.\n69: 3. **Tool Call & Permission Gate**:\n70:    - If tool is mutating (`writeFile`, `editFile`), a snapshot checkpoint is taken first.\n71:    - If tool requires permission (e.g., terminal command outside auto-allow list), halts and dispatches `PermissionRequest` to UI.\n72: 4. **Execution & Sandboxing**: Executes tool through typed handlers. Direct `fs.writeFile` is strictly forbidden; file edits produce reviewable diffs in the File Model Service.\n73: 5. **Observation Feedback**: Formats tool output (or errors) as observations back into the context envelope and iterates up to $N$ turns (default 25) until `finish_reason == stop`.\n74: \n75: ---\n76: \n77: ## 5. File Model Service & Side-Effect Transparency\n78: Direct disk writes from the agent are forbidden.\n79: 1. `editFile` / `writeFile` emits a proposed delta `{ path, original, modified, hunkRange }`.\n80: 2. The renderer's `fileModels.ts` receives the delta and mounts it as a reviewable diff in Monaco Diff Editor.\n81: 3. User can **Accept Hunk**, **Accept All**, or **Reject**.\n82: 4. Checkpoints are stored in `.third-eye/checkpoints/` before every commit, enabling single-click \"Revert All AI Changes\".\n83: ",
+        "totalLines": 83,
+        "startLine": 1,
+        "endLine": 83,
+        "truncated": false
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "readFile",
+            "args": {
+              "path": "docs/AGENT.md"
+            },
+            "id": "call_1010802"
+          },
+          "thoughtSignature": "EmAKXgFpFH0TsIoT8P87il7VnS0m780dGZRSgpaM41OkTnD4UPsuF3Eend/Nr9kviO3MqkNqN/BWdEP3eys/nX6axnCH24leFzjiLvICv5S26Kd6Q8c0KhVeba7RjIp5mF0="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1010802",
+          "name": "readFile",
+          "args": {
+            "path": "docs/AGENT.md"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "readFile",
+      "toolCallId": "call_1010802",
+      "content": {
+        "path": "docs/AGENT.md",
+        "content": "1: # THIRD_EYE Autonomous Agent Specification\n2: \n3: ## 1. Agent Mental Model & Principles\n4: The THIRD_EYE agent is an autonomous, context-aware coding partner designed to mirror senior developer workflows. It operates under five foundational principles:\n5: \n6: 1. **Context-First, Not Token-Dumping**: The agent never reads 1,000-line files blindly. It relies on the Workspace Repo-Map, symbol search, and line-bounded chunk retrievers.\n7: 2. **Side-Effect Transparency**: Every mutating operation produces visible diffs before persistent disk mutation. Checkpoints are recorded prior to state changes.\n8: 3. **Safe Execution**: High-risk terminal commands (e.g. `rm -rf`, destructive migrations, package deletions) require explicit user permission unless matching the workspace auto-allow policy.\n9: 4. **Resilience to Failure**: Tool failures, compiler errors, and command non-zero exits are treated as informative observations, not system crashes.\n10: 5. **Background Task Awareness**: Long-running background jobs (e.g., dev servers, test runners) return detached task handles, allowing continuous agent work while polling output tails.\n11: \n12: ---\n13: \n14: ## 2. The Autonomous Agent Loop (`backend/ai-service/src/loop.ts`)\n15: \n16: ```mermaid\n17: sequenceDiagram\n18:     autonumber\n19:     actor User\n20:     participant Renderer as Renderer (ChatPanel & Monaco)\n21:     participant Loop as Agent Loop (ai-service)\n22:     participant Ctx as Context Engine (repoMap/retriever)\n23:     participant Perm as Policy Engine (permissions.ts)\n24:     participant Tools as Tool Registry\n25:     participant PTY as PTY Service (:4001)\n26: \n27:     User->>Renderer: Submit task or prompt\n28:     Renderer->>Loop: POST /api/ai/agent/stream\n29:     Loop->>Ctx: Build Context Envelope (Budget ≤ 128k)\n30:     Ctx-->>Loop: Envelope {System, RepoMap, Tabs, Tail, History}\n31:     \n32:     loop Max 25 Iterations\n33:         Loop->>Loop: Stream LLM Generation\n34:         Loop-->>Renderer: SSE text-delta (Smooth fading render)\n35:         alt Model requests ToolCall\n36:             Loop->>Perm: Check Risk Level & Grants\n37:             alt Requires User Permission\n38:                 Loop-->>Renderer: SSE permission_request\n39:                 Renderer->>User: Display PermissionPrompt\n40:                 User->>Renderer: Decision (allow_once | allow_session | reject)\n41:                 Renderer->>Loop: POST /api/ai/agent/permission_decision\n42:             end\n43:             alt Tool == editFile / writeFile\n44:                 Loop->>Loop: Snapshot Checkpoint (content hash)\n45:                 Loop->>Tools: Generate In-Memory Diff\n46:                 Tools-->>Renderer: Mount Reviewable Diff in Monaco\n47:             else Tool == runTerminal\n48:                 Loop->>PTY: Execute in session (streaming / background)\n49:                 PTY-->>Tools: Output tail (last 200 lines) + exitCode\n50:             end\n51:             Tools-->>Loop: ToolResult observation\n52:             Loop->>Loop: Append ToolResult to Context Envelope\n53:         else Model emits STOP\n54:             Loop-->>Renderer: SSE finish (status: complete)\n55:         end\n56:     end\n57: ```\n58: \n59: ---\n60: \n61: ## 3. Tool Specifications & Risk Matrix\n62: \n63: | Tool | Risk Level | Permission Requirement | Description |\n64: | :--- | :--- | :--- | :--- |\n65: | `readFile` | Low | Auto-allowed | Reads file with line-number slices; respects `.gitignore` |\n66: | `listFiles` / `listDir` | Low | Auto-allowed | Virtual directory tree scan |\n67: | `searchCode` | Low | Auto-allowed | Pattern & regex code search |\n68: | `getDiagnostics` | Low | Auto-allowed | Compiler & linter error extraction |\n69: | `writeFile` | Medium | Requires File Model Diff Preview | Creates or replaces file via in-memory model |\n70: | `editFile` | Medium | Requires File Model Diff Preview | Precise search/replace hunk edits with fuzzy fallback |\n71: | `runTerminal` | High / Configurable | Decision required unless command is in auto-allow list | Runs shell commands; supports `background: true` returning `taskId` |\n72: | `salesforceQuery` | Medium | Auto-allowed (read-only SOQL) | Executes SOQL queries via salesforce microservice |\n73: | `restoreCheckpoint` | Medium | Prompt confirmation | Reverts workspace to a previous checkpoint hash |\n74: \n75: ---\n76: \n77: ## 4. Context Budget Management (128k Window)\n78: \n79: ```\n80: [================= CONTEXT WINDOW ALLOCATION (128K TOKENS) =================]\n81: [ System & Tool Schemas: 20% ] [ Repo-Map Index: 15% ] [ Working Tabs/Tail: 25% ] [ Turn History: 40% ]\n82: ```\n83: \n84: When context approaches 85% of budget:\n85: 1. Low-relevance retrieval chunks are dropped first.\n86: 2. Old turns are summarized via `compaction.ts`, retaining key decisions and tool output summaries while discarding raw logs.\n87: ",
+        "totalLines": 87,
+        "startLine": 1,
+        "endLine": 87,
+        "truncated": false
+      }
+    },
+    {
+      "role": "assistant",
+      "content": "",
+      "rawParts": [
+        {
+          "functionCall": {
+            "name": "runTerminal",
+            "args": {
+              "command": "npm run smoke"
+            },
+            "id": "call_1903257"
+          },
+          "thoughtSignature": "EmAKXgFpFH0T4Qw7rXEHK6csiCHdxiP/dJ8VHwxBLU7+q9KLA1WK8ckomfh6gbL7qj7108KdRgrNefjmSNSyOszPf3T5G4YNS458XrJ6TqVnlIHgg74qSMoCEP77+O6yO3g="
+        }
+      ],
+      "toolCalls": [
+        {
+          "id": "call_1903257",
+          "name": "runTerminal",
+          "args": {
+            "command": "npm run smoke"
+          }
+        }
+      ]
+    },
+    {
+      "role": "tool",
+      "name": "runTerminal",
+      "toolCallId": "call_1903257",
+      "content": {
+        "command": "npm run smoke",
+        "output": "\n> third-eye@1.0.0 smoke\n> node scripts/smoke-test.js\n\n\n\u001b[1m\u001b[36m=== THIRD_EYE E2E SMOKE TEST RUNNER ===\u001b[0m\n\n\u001b[32m✔ [PASS]\u001b[0m PTY Service is healthy on port 4001 (uptime: 43s)\n\u001b[32m✔ [PASS]\u001b[0m AI Service is healthy on port 4002 (model: active)\n\u001b[32m✔ [PASS]\u001b[0m Salesforce Service is healthy on port 4003\n\u001b[32m✔ [PASS]\u001b[0m Frontend Web App is serving HTTP 200 on port 3000\n\u001b[32m✔ [PASS]\u001b[0m Workspace File System verified (package: third-eye v1.0.0)\n\u001b[32m✔ [PASS]\u001b[0m Terminal Subsystem active (Current live PTY sessions: 0)\n\u001b[36mℹ [INFO]\u001b[0m Testing AI Agent communication channel...\n\u001b[32m✔ [PASS]\u001b[0m AI Agent replied successfully (VERIFIED...)\n\n\u001b[1m=== SUMMARY: 7 passed, 0 failed ===\u001b[0m\n\n",
+        "exitCode": 0,
+        "durationMs": 2171,
+        "background": false,
+        "truncated": false
+      }
+    }
+  ],
+  "timestamp": 1791720638662
+}

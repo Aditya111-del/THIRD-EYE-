@@ -3,7 +3,7 @@ $ErrorActionPreference = "Continue"
 
 Write-Host "========================================================" -ForegroundColor Cyan
 Write-Host "       Pushing THIRD EYE to GitHub Repository" -ForegroundColor Cyan
-Write-Host "       https://github.com/adityas-god/THIRD_EYE" -ForegroundColor Cyan
+Write-Host "       https://github.com/Aditya111-del/THIRD-EYE-" -ForegroundColor Cyan
 Write-Host "========================================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -18,7 +18,7 @@ if (Test-Path ".git") {
 Write-Host "`n[2/4] Initializing fresh, clean Git repository..." -ForegroundColor Yellow
 git init
 git branch -M main
-git remote add origin https://github.com/adityas-god/THIRD_EYE.git
+git remote add origin https://github.com/Aditya111-del/THIRD-EYE-.git
 
 Write-Host "`n[3/4] Staging clean workspace files (.gitignore protects .env and node_modules)..." -ForegroundColor Yellow
 git add .
@@ -30,12 +30,12 @@ git push -u origin main --force
 if ($LASTEXITCODE -eq 0) {
     Write-Host "`n========================================================" -ForegroundColor Green
     Write-Host " SUCCESS: Pushed clean project to GitHub!" -ForegroundColor Green
-    Write-Host " https://github.com/adityas-god/THIRD_EYE" -ForegroundColor Green
+    Write-Host " https://github.com/Aditya111-del/THIRD-EYE-" -ForegroundColor Green
     Write-Host "========================================================" -ForegroundColor Green
 } else {
     Write-Host "`n--------------------------------------------------------" -ForegroundColor Yellow
     Write-Host "If GitHub still asks to allow the secret, open this URL:" -ForegroundColor Yellow
-    Write-Host "https://github.com/adityas-god/THIRD_EYE/security/secret-scanning/unblock-secret/3KWe5OTCuDLCsvMxKSkQsbSD5gq" -ForegroundColor Cyan
+    Write-Host "https://github.com/Aditya111-del/THIRD-EYE-/security/secret-scanning/unblock-secret/3KWe5OTCuDLCsvMxKSkQsbSD5gq" -ForegroundColor Cyan
     Write-Host "Click 'Allow secret' then run push_to_github.ps1 again." -ForegroundColor Yellow
     Write-Host "--------------------------------------------------------" -ForegroundColor Yellow
 }

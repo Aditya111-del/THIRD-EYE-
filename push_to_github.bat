@@ -2,7 +2,7 @@
 title Pushing THIRD EYE to GitHub...
 echo ========================================================
 echo        Pushing THIRD EYE to GitHub Repository
-echo        https://github.com/adityas-god/THIRD_EYE
+echo        https://github.com/Aditya111-del/THIRD-EYE-
 echo ========================================================
 echo.
 
@@ -16,7 +16,7 @@ if exist ".git" (
 echo [2/4] Initializing fresh, clean Git repository...
 git init
 git branch -M main
-git remote add origin https://github.com/adityas-god/THIRD_EYE.git
+git remote add origin https://github.com/Aditya111-del/THIRD-EYE-.git
 
 echo [3/4] Staging clean workspace files (.gitignore protects .env and node_modules)...
 git add .
@@ -29,13 +29,13 @@ if %ERRORLEVEL% EQU 0 (
     echo.
     echo ========================================================
     echo  SUCCESS: Pushed clean project to GitHub!
-    echo  https://github.com/adityas-god/THIRD_EYE
+    echo  https://github.com/Aditya111-del/THIRD-EYE-
     echo ========================================================
 ) else (
     echo.
     echo --------------------------------------------------------
     echo If GitHub still asks to allow the secret, open this URL:
-    echo https://github.com/adityas-god/THIRD_EYE/security/secret-scanning/unblock-secret/3KWe5OTCuDLCsvMxKSkQsbSD5gq
+    echo https://github.com/Aditya111-del/THIRD-EYE-/security/secret-scanning/unblock-secret/3KWe5OTCuDLCsvMxKSkQsbSD5gq
     echo Click 'Allow secret', then run push_to_github.bat again!
     echo --------------------------------------------------------
 )

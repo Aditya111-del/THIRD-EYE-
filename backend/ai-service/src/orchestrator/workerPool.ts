@@ -4,12 +4,13 @@
  */
 
 import { AgentSpec, TaskGraphStep, WorkerRole } from '@third-eye/shared';
-import { CoreAgentLoop, AgentRunContext, AgentRunResult } from '../core/loop';
+import { CoreAgentLoop, AgentRunContext, AgentRunResult, isVisionCapableModel } from '../core/loop';
 
 export class WorkerPool {
   private maxConcurrency: number;
   private activeWorkersCount = 0;
   private loop: CoreAgentLoop;
+  private cancelledSessions: Set<string> = new Set();
 
   constructor(workspaceRoot: string, maxConcurrency = 3) {
     this.maxConcurrency = maxConcurrency;
@@ -20,6 +21,16 @@ export class WorkerPool {
     this.loop.setWorkspaceRoot(workspaceRoot);
   }
 
+  public cancel(sessionId: string): void {
+    this.cancelledSessions.add(sessionId);
+    this.loop.cancel(sessionId);
+  }
+
+  public resetCancellation(sessionId: string): void {
+    this.cancelledSessions.delete(sessionId);
+    this.loop.resetCancellation(sessionId);
+  }
+
   public canAcceptWork(): boolean {
     return this.activeWorkersCount < this.maxConcurrency;
   }
@@ -28,10 +39,25 @@ export class WorkerPool {
     return this.activeWorkersCount;
   }
 
+  // Per-worker hard timeout: 8 minutes max per task step
+  private readonly WORKER_TIMEOUT_MS = 8 * 60 * 1000;
+
   public async executeTask(
     step: TaskGraphStep,
     context: AgentRunContext
   ): Promise<AgentRunResult> {
+    if (this.cancelledSessions.has(context.sessionId)) {
+      return {
+        agentId: `${step.workerHint || 'worker'}_${step.id}`,
+        role: step.workerHint || 'coder',
+        reply: 'Task cancelled by user.',
+        iterations: 0,
+        status: 'stuck',
+        toolTraces: [],
+        modifiedFiles: [],
+      };
+    }
+
     this.activeWorkersCount++;
 
     const role: WorkerRole = step.workerHint || 'coder';
@@ -46,15 +72,51 @@ export class WorkerPool {
       ],
     };
 
+    // Worker-level timeout: a stuck worker should never block the whole pipeline
+    const timeoutPromise = new Promise<AgentRunResult>((resolve) =>
+      setTimeout(() => {
+        console.warn(`[WorkerPool] Worker for step "${step.title}" exceeded ${this.WORKER_TIMEOUT_MS / 1000}s hard timeout. Returning partial result.`);
+        resolve({
+          agentId: agentSpec.id,
+          role,
+          reply: `Step "${step.title}" timed out after ${this.WORKER_TIMEOUT_MS / 1000}s. Partial work may have been completed.`,
+          iterations: 0,
+          status: 'stuck',
+          toolTraces: [],
+          modifiedFiles: [],
+        });
+      }, this.WORKER_TIMEOUT_MS)
+    );
+
     try {
-      const result = await this.loop.runAgent(agentSpec, {
-        ...context,
-        currentStep: step,
-        userMessage: `You are assigned Task Step "${step.title}".
+      const isImageError = step.error && /image input|vision capability|support image|Filter by Image Support/i.test(step.error);
+      const shouldStripImages = Boolean(isImageError || !isVisionCapableModel(context.model));
+      const effectiveImages = shouldStripImages ? [] : context.images;
+      let effectiveHistory = context.history;
+      if (shouldStripImages && Array.isArray(effectiveHistory)) {
+        effectiveHistory = effectiveHistory.map((h: any) => {
+          if (h.images) {
+            const { images, ...rest } = h;
+            return rest;
+          }
+          return h;
+        });
+      }
+
+      const result = await Promise.race([
+        this.loop.runAgent(agentSpec, {
+          ...context,
+          history: effectiveHistory,
+          images: effectiveImages,
+          maxIterations: 30, // Generous iteration budget for writing code, fixing errors, and verifying
+          currentStep: step,
+          userMessage: `You are assigned Task Step "${step.title}".
 DESCRIPTION: ${step.description}
 ${step.error ? `PREVIOUS FAILURE CONTEXT TO FIX: ${step.error}` : ''}
 Execute required tools (inspections, terminal commands, edits) and verify your changes.`,
-      });
+        }),
+        timeoutPromise,
+      ]);
 
       return result;
     } finally {

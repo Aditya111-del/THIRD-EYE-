@@ -64,6 +64,7 @@ export interface ElectronAPI {
     onRootChanged: (callback: (data: { root: string; name: string }) => void) => () => void;
     openPath: (targetPath: string) => Promise<{ success: boolean; folderPath?: string; folderName?: string }>;
     openFolder?: () => Promise<{ success: boolean; canceled?: boolean; folderPath?: string; folderName?: string }>;
+    createAndOpenFolder?: (params: { folderName: string; parentPath?: string }) => Promise<{ success: boolean; folderPath?: string; folderName?: string; error?: string }>;
     resetToDefault?: () => Promise<{ success: boolean; folderPath?: string; folderName?: string }>;
     close?: () => Promise<{ success: boolean; folderPath?: string; folderName?: string }>;
   } | undefined;
@@ -143,67 +144,7 @@ export interface ElectronAPI {
     search?: (query: string, options?: any) => Promise<any>;
     onWatchEvent?: (callback: (payload: { type: string; path: string; eventType?: string; filename?: string }) => void) => () => void;
   } | undefined;
-  git?: {
-    status: () => Promise<{
-      success: boolean;
-      isRepo?: boolean;
-      branch?: string;
-      remoteUrl?: string;
-      repoName?: string;
-      upstream?: string;
-      ahead?: number;
-      behind?: number;
-      files?: Array<{
-        status: string;
-        path: string;
-        fullPath: string;
-        isStaged: boolean;
-        isUnstaged: boolean;
-        isUntracked: boolean;
-      }>;
-      stagedFiles?: Array<{
-        status: string;
-        path: string;
-        fullPath: string;
-        isStaged: boolean;
-        isUnstaged: boolean;
-        isUntracked: boolean;
-      }>;
-      unstagedFiles?: Array<{
-        status: string;
-        path: string;
-        fullPath: string;
-        isStaged: boolean;
-        isUnstaged: boolean;
-        isUntracked: boolean;
-      }>;
-      count?: number;
-      outgoingCommits?: Array<{
-        hash: string;
-        author: string;
-        date: string;
-        message: string;
-      }>;
-      recentCommits?: Array<{
-        hash: string;
-        author: string;
-        date: string;
-        message: string;
-      }>;
-      error?: string;
-    }>;
-    init: () => Promise<{ success: boolean; error?: string | undefined; stdout?: string | undefined }>;
-    stage: (filePath?: string | undefined) => Promise<{ success: boolean; error?: string | undefined }>;
-    unstage: (filePath?: string | undefined) => Promise<{ success: boolean; error?: string | undefined }>;
-    discard: (options: { filePath: string; isUntracked?: boolean | undefined }) => Promise<{ success: boolean; error?: string | undefined }>;
-    commit: (options: string | { message: string; stageAll?: boolean | undefined }) => Promise<{ success: boolean; error?: string | undefined; output?: string | undefined }>;
-    push: (options?: { branch?: string | undefined; remote?: string | undefined; force?: boolean | undefined; setUpstream?: boolean | undefined; token?: string | undefined } | undefined) => Promise<{ success: boolean; error?: string | undefined; stdout?: string | undefined }>;
-    pull: (options?: { remote?: string | undefined; branch?: string | undefined; token?: string | undefined } | undefined) => Promise<{ success: boolean; error?: string | undefined; stdout?: string | undefined }>;
-    fetch: (options?: { remote?: string | undefined; token?: string | undefined } | undefined) => Promise<{ success: boolean; error?: string | undefined; stdout?: string | undefined }>;
-    setRemote: (options: { url: string; remote?: string | undefined }) => Promise<{ success: boolean; error?: string | undefined }>;
-    clone: (options: { url: string; targetDir?: string | undefined; token?: string | undefined }) => Promise<{ success: boolean; error?: string | undefined; folderPath?: string | undefined; folderName?: string | undefined }>;
-    onStatusChanged?: (callback: () => void) => () => void;
-  } | undefined;
+  git?: ThirdEyeGitAPI | undefined;
   github?: {
     getUser: (options: { token: string }) => Promise<{
       success: boolean;
@@ -309,8 +250,10 @@ export interface ThirdEyeTerminalAPI {
   list: () => Promise<TerminalSessionInfo[]>;
   cd: (id: string | { id?: string; dir?: string }, dir?: string) => Promise<{ success: boolean }>;
   getBuffer: (id: string) => Promise<string>;
+  getCwd?: (options?: { id?: string }) => Promise<string>;
   onData: (callback: (payload: { id: string; data: string }) => void) => () => void;
   onExit: (callback: (payload: { id: string; exitCode: number; signal?: number }) => void) => () => void;
+  onCwdChanged?: (callback: (payload: { id: string; cwd: string }) => void) => () => void;
 }
 
 export interface ThirdEyeAgentAPI {
@@ -324,9 +267,19 @@ export interface ThirdEyeAgentAPI {
 }
 
 export interface ThirdEyeGitAPI {
-  status: () => Promise<any>;
-  commit: (message: string) => Promise<any>;
-  diff: () => Promise<{ diff: string; error?: string }>;
+  status: (options?: { cwd?: string | undefined }) => Promise<any>;
+  init: (options?: { cwd?: string | undefined }) => Promise<any>;
+  stage: (filePath?: string | undefined, options?: { cwd?: string | undefined }) => Promise<any>;
+  unstage: (filePath?: string | undefined, options?: { cwd?: string | undefined }) => Promise<any>;
+  discard: (options: { filePath: string; isUntracked?: boolean | undefined; cwd?: string | undefined }) => Promise<any>;
+  commit: (options: string | { message: string; stageAll?: boolean | undefined; cwd?: string | undefined }) => Promise<any>;
+  push: (options?: { branch?: string | undefined; remote?: string | undefined; force?: boolean | undefined; setUpstream?: boolean | undefined; token?: string | undefined; cwd?: string | undefined }) => Promise<any>;
+  pull: (options?: { branch?: string | undefined; remote?: string | undefined; token?: string | undefined; cwd?: string | undefined }) => Promise<any>;
+  fetch: (options?: { remote?: string | undefined; token?: string | undefined; cwd?: string | undefined }) => Promise<any>;
+  setRemote: (options: { url: string; remote?: string | undefined; cwd?: string | undefined }) => Promise<any>;
+  clone: (options: { url: string; targetDir?: string | undefined; token?: string | undefined }) => Promise<any>;
+  diff: (options?: { cwd?: string | undefined }) => Promise<{ diff: string; error?: string }>;
+  onStatusChanged?: (callback: () => void) => () => void;
 }
 
 export interface ThirdEyeWindowAPI {
@@ -350,6 +303,7 @@ export interface ThirdEyeDialogAPI {
 export interface ThirdEyeWorkspaceAPI {
   openPath: (targetPath: string) => Promise<{ success: boolean; folderPath?: string; folderName?: string }>;
   openFolder?: () => Promise<{ success: boolean; canceled?: boolean; folderPath?: string; folderName?: string }>;
+  createAndOpenFolder?: (params: { folderName: string; parentPath?: string }) => Promise<{ success: boolean; folderPath?: string; folderName?: string; error?: string }>;
   resetToDefault?: () => Promise<{ success: boolean; folderPath?: string; folderName?: string }>;
   close?: () => Promise<{ success: boolean; folderPath?: string; folderName?: string }>;
   onRootChanged: (callback: (data: { root: string; name: string }) => void) => () => void;

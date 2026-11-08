@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 /**
- * THIRD_EYE E2E Smoke Test Runner (Phase 0 Safety Net)
- * Verifies all 4 processes, workspace file system access, terminal subsystem, and AI chat.
+ * THIRD_EYE E2E Smoke Test Runner (Beast Mode Comprehensive Test Suite)
+ * Verifies all 4 processes, workspace file system access, terminal subsystem,
+ * polyglot tools (AST, references, diagnostics, DOM inspection), and multi-agent DAG planning.
  */
 
 const http = require('http');
@@ -65,7 +66,7 @@ function checkHttp(url, options = {}) {
 }
 
 async function runSmokeTest() {
-  console.log(`\n${ANSI.bold}${ANSI.cyan}=== THIRD_EYE E2E SMOKE TEST RUNNER ===${ANSI.reset}\n`);
+  console.log(`\n${ANSI.bold}${ANSI.cyan}=== THIRD_EYE COMPLETE FUNCTIONALITY VERIFICATION ===${ANSI.reset}\n`);
   let passed = 0;
   let failed = 0;
 
@@ -99,8 +100,7 @@ async function runSmokeTest() {
     failed++;
   }
 
-
-  // 4. Check Frontend Web App (:3000)
+  // 3. Check Frontend Web App (:3000)
   try {
     const res = await checkHttp('http://127.0.0.1:3000/');
     if (res.status === 200) {
@@ -114,7 +114,7 @@ async function runSmokeTest() {
     failed++;
   }
 
-  // 5. File System & Workspace Boundary Check
+  // 4. File System & Workspace Boundary Check
   try {
     const rootPkg = path.resolve(__dirname, '../package.json');
     if (fs.existsSync(rootPkg)) {
@@ -133,7 +133,7 @@ async function runSmokeTest() {
     failed++;
   }
 
-  // 6. Terminal Subsystem Check
+  // 5. Terminal Subsystem Check
   try {
     const res = await checkHttp('http://127.0.0.1:4001/api/pty/sessions');
     const sessions = JSON.parse(res.body);
@@ -144,7 +144,7 @@ async function runSmokeTest() {
     failed++;
   }
 
-  // 7. AI Agent Live Interaction Check
+  // 6. AI Agent Live Interaction Check
   try {
     logInfo('Testing AI Agent communication channel...');
     const res = await checkHttp('http://127.0.0.1:4002/api/ai/chat', {
@@ -166,6 +166,74 @@ async function runSmokeTest() {
     }
   } catch (err) {
     logFail('AI Agent Live Interaction check failed', err);
+    failed++;
+  }
+
+  // 7. Polyglot Codebase Reconnaissance Tool
+  try {
+    const { executeAnalyzeCodebase } = require('../backend/ai-service/dist/tools/analysisTools');
+    const analysis = await executeAnalyzeCodebase(process.cwd());
+    if (analysis && analysis.ecosystem) {
+      logPass(`Polyglot Analysis Tool active (Ecosystem: ${analysis.ecosystem}, Languages: ${analysis.languages.join(', ')})`);
+      passed++;
+    } else {
+      throw new Error('Analysis returned invalid result');
+    }
+  } catch (err) {
+    logFail('Polyglot Analysis Tool check failed', err);
+    failed++;
+  }
+
+  // 8. AST Symbol Extraction & Impact Analysis (find_references)
+  try {
+    const { executeSearchSymbols, executeFindReferences } = require('../backend/ai-service/dist/tools/searchSymbols');
+    const syms = await executeSearchSymbols({ query: 'Orchestrator' }, process.cwd());
+    const refs = await executeFindReferences({ symbol: 'Orchestrator' }, process.cwd());
+    if (syms.matches.length > 0 && refs.totalReferences > 0) {
+      logPass(`AST & Impact Analysis verified (${syms.matches.length} symbols, ${refs.totalReferences} references in ${refs.referencingFiles.length} files)`);
+      passed++;
+    } else {
+      throw new Error('Symbol or reference search returned 0 matches');
+    }
+  } catch (err) {
+    logFail('AST & Impact Analysis check failed', err);
+    failed++;
+  }
+
+  // 9. DOM & Live Preview Verification Tool
+  try {
+    const { executeInspectDom } = require('../backend/ai-service/dist/tools/browserTools');
+    const dom = await executeInspectDom({ urlOrPort: 'http://127.0.0.1:3000' });
+    if (dom.isUp) {
+      logPass(`DOM & Preview Inspector verified (Status: ${dom.statusCode}, Headings: ${dom.tagsSummary.headings}, Scripts: ${dom.tagsSummary.scripts})`);
+      passed++;
+    } else {
+      throw new Error('Dev server at port 3000 was unreachable by DOM Inspector');
+    }
+  } catch (err) {
+    logFail('DOM & Preview Inspector check failed', err);
+    failed++;
+  }
+
+  // 10. Domain-Adaptive DAG Planner (Algorithms, AI Agents, Systems/CLI, Full-Stack)
+  try {
+    const { Orchestrator } = require('../backend/ai-service/dist/orchestrator/orchestrator');
+    const orch = new Orchestrator(process.cwd());
+    const dummyCtx = { workspaceRoot: process.cwd(), sessionId: 'smoke-test', apiKey: 'dummy', model: 'gemini-3.5-flash-lite' };
+
+    const algoPlan = await orch.planTaskGraph('implement dijkstra graph algorithm with priority queue', dummyCtx);
+    const agentPlan = await orch.planTaskGraph('build an autonomous AI agent with tool calling', dummyCtx);
+    const sysPlan = await orch.planTaskGraph('create a rust cli tool for log analysis', dummyCtx);
+    const webPlan = await orch.planTaskGraph('make a milkshake ordering website with interactive cart', dummyCtx);
+
+    if (algoPlan.length >= 4 && agentPlan.length >= 4 && sysPlan.length >= 4 && webPlan.length >= 4) {
+      logPass(`Multi-Agent DAG Planner verified across all 4 domains (Algo: ${algoPlan.length} steps, Agent: ${agentPlan.length} steps, CLI: ${sysPlan.length} steps, Web: ${webPlan.length} steps)`);
+      passed++;
+    } else {
+      throw new Error('One or more domain DAG plans had insufficient steps');
+    }
+  } catch (err) {
+    logFail('Multi-Agent DAG Planner check failed', err);
     failed++;
   }
 

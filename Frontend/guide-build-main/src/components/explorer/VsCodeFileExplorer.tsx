@@ -4,6 +4,7 @@ import {
   ChevronRight,
   FilePlus,
   FolderPlus,
+  Folder,
   RotateCw,
   RotateCcw,
   ChevronsDownUp,
@@ -16,11 +17,13 @@ import {
   Play,
   CheckCircle2,
   AlertTriangle,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { EditorWorkspaceApi } from "@/hooks/useEditorWorkspace";
 import type { TerminalApi } from "@/hooks/useTerminalSession";
 import { getFileIcon, getFolderIcon } from "@/components/editor/MonacoCodeEditor";
+import { ModernFolderIcon, ModernFileIcon } from "./VsCodeTreeIcons";
 
 interface FileEntry {
   name: string;
@@ -43,7 +46,7 @@ function PencilIcon() {
 // Hidden entries to skip in the tree (keep VCS and internal caches hidden; node_modules is controlled by showNodeModules)
 const HIDDEN = new Set([
   '.git', '.output', '.wrangler', '.vite',
-  '.next', 'dist', 'build', '.cache', '__pycache__',
+  '.next', '.cache', '__pycache__',
 ]);
 
 export function VsCodeFileExplorer({
@@ -82,6 +85,73 @@ export function VsCodeFileExplorer({
   } | null>(null);
   const [hasBun, setHasBun] = useState(false);
   const [nodeModulesCount, setNodeModulesCount] = useState<number | null>(null);
+
+  // Git status integration for file and folder indicators (Screenshot 2)
+  const [gitFileMap, setGitFileMap] = useState<Map<string, { status: string; isUntracked: boolean }>>(new Map());
+  const [gitFolderMap, setGitFolderMap] = useState<Map<string, "M" | "U" | "A">>(new Map());
+
+  const refreshGitStatus = useCallback(async () => {
+    if (!window.electronAPI?.git?.status) return;
+    try {
+      const targetCwd = editorApi.workspaceRoot || (typeof window !== "undefined" && (window as any).__THIRD_EYE_WORKSPACE_ROOT__) || "";
+      const res = await window.electronAPI.git.status({ cwd: targetCwd });
+      if (res?.success && Array.isArray(res.files)) {
+        const fMap = new Map<string, { status: string; isUntracked: boolean }>();
+        const dirMap = new Map<string, "M" | "U" | "A">();
+
+        (res.files as any[]).forEach((item) => {
+          const normPath = (item.path || "").replace(/\\/g, "/");
+          const normFull = item.fullPath ? item.fullPath.replace(/\\/g, "/") : "";
+          let letter = "M";
+          if (item.isUntracked || item.status === "??") letter = "U";
+          else if (item.status?.includes("A")) letter = "A";
+          else if (item.status?.includes("D")) letter = "D";
+          else if (item.status?.includes("M")) letter = "M";
+
+          fMap.set(normPath, { status: letter, isUntracked: item.isUntracked });
+          if (normFull) fMap.set(normFull, { status: letter, isUntracked: item.isUntracked });
+
+          // Mark all ancestor directories
+          const parts = normPath.split("/");
+          let currentDir = "";
+          for (let i = 0; i < parts.length - 1; i++) {
+            currentDir = currentDir ? `${currentDir}/${parts[i]}` : parts[i];
+            const existing = dirMap.get(currentDir);
+            if (letter === "M" || !existing) {
+              dirMap.set(currentDir, letter as any);
+            }
+          }
+        });
+
+        setGitFileMap(fMap);
+        setGitFolderMap(dirMap);
+      } else {
+        setGitFileMap(new Map());
+        setGitFolderMap(new Map());
+      }
+    } catch (err) {
+      console.warn("[VsCodeFileExplorer] Git status error:", err);
+    }
+  }, [editorApi.workspaceRoot]);
+
+  // Synchronize git status on mount and on git events
+  useEffect(() => {
+    refreshGitStatus();
+    let unsubGit: (() => void) | undefined;
+    if (window.electronAPI?.git?.onStatusChanged) {
+      unsubGit = window.electronAPI.git.onStatusChanged(() => {
+        refreshGitStatus();
+      });
+    }
+    return () => {
+      unsubGit?.();
+    };
+  }, [refreshGitStatus]);
+
+  // Quick Initialize Project state
+  const [initFolderOpen, setInitFolderOpen] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [isInitializing, setIsInitializing] = useState(false);
 
   // Create / rename state
   const [creating, setCreating] = useState<{ parentPath: string; type: "file" | "folder" } | null>(null);
@@ -153,7 +223,12 @@ export function VsCodeFileExplorer({
           relativePath: e.relativePath,
           isDirectory: e.isDirectory,
           extension: e.extension,
-        }));
+        }))
+        .sort((a, b) => {
+          if (a.isDirectory && !b.isDirectory) return -1;
+          if (!a.isDirectory && b.isDirectory) return 1;
+          return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
+        });
     } catch (err) {
       console.error("[Explorer] readDir error:", err);
       return [];
@@ -205,7 +280,8 @@ export function VsCodeFileExplorer({
   const loadRoot = useCallback(async () => {
     refreshTree();
     verifyNodeModulesOnDisk();
-  }, [refreshTree, verifyNodeModulesOnDisk]);
+    refreshGitStatus();
+  }, [refreshTree, verifyNodeModulesOnDisk, refreshGitStatus]);
 
   useEffect(() => {
     if (window.electronAPI?.fs?.getWorkspaceRoot) {
@@ -328,8 +404,8 @@ export function VsCodeFileExplorer({
         if (editorApi?.setWorkspaceRoot) {
           editorApi.setWorkspaceRoot(res.folderPath);
         }
-        if (terminalApi) {
-          terminalApi.cdToDirectory(res.folderPath);
+        if (typeof window !== "undefined") {
+          (window as any).__THIRD_EYE_WORKSPACE_ROOT__ = res.folderPath;
         }
         refreshTree();
 
@@ -346,20 +422,48 @@ export function VsCodeFileExplorer({
     }
   }, [editorApi, refreshTree, terminalApi]);
 
+  // ── Quick Initialize and open dedicated project folder without OS dialog ──
+  const handleCreateAndOpenProject = useCallback(async (customName?: string) => {
+    const targetName = (customName || newProjectName || "my-new-app").trim();
+    if (!targetName) return;
+    setIsInitializing(true);
+    try {
+      if (window.electronAPI?.workspace?.createAndOpenFolder) {
+        const res = await window.electronAPI.workspace.createAndOpenFolder({ folderName: targetName });
+        if (res?.success && res.folderPath) {
+          const parts = res.folderPath.replace(/\\/g, "/").split("/").filter(Boolean);
+          setWorkspaceName(parts[parts.length - 1] || targetName);
+          setExpandedSet(new Set());
+          if (editorApi?.setWorkspaceRoot) {
+            editorApi.setWorkspaceRoot(res.folderPath);
+          }
+          if (typeof window !== "undefined") {
+            (window as any).__THIRD_EYE_WORKSPACE_ROOT__ = res.folderPath;
+          }
+          setInitFolderOpen(false);
+          setNewProjectName("");
+          refreshTree();
+        }
+      }
+    } catch (err) {
+      console.error("Failed to initialize project folder:", err);
+    } finally {
+      setIsInitializing(false);
+    }
+  }, [newProjectName, editorApi, refreshTree, terminalApi]);
+
   // ── Reset to default THIRD_EYE workspace ─────────────────────────────────
   const resetToDefaultWorkspace = useCallback(async () => {
-    if (window.electronAPI?.workspace?.resetToDefault) {
-      await window.electronAPI.workspace.resetToDefault();
-    } else if (window.electronAPI?.workspace?.openPath) {
-      await window.electronAPI.workspace.openPath("/Users/adityasalgotra/Downloads/THIRD_EYE");
+    if (window.electronAPI?.workspace?.close) {
+      await window.electronAPI.workspace.close();
     }
-    setWorkspaceName("THIRD_EYE");
+    setWorkspaceName("");
     setExpandedSet(new Set());
     if (editorApi?.setWorkspaceRoot) {
-      editorApi.setWorkspaceRoot("/Users/adityasalgotra/Downloads/THIRD_EYE");
+      editorApi.setWorkspaceRoot("");
     }
     if (terminalApi) {
-      terminalApi.cdToDirectory("/Users/adityasalgotra/Downloads/THIRD_EYE");
+      terminalApi.cdToDirectory("~");
     }
     refreshTree();
   }, [editorApi, refreshTree, terminalApi]);
@@ -442,19 +546,27 @@ export function VsCodeFileExplorer({
     const isRenaming = renaming?.entry.path === entry.path;
 
     if (entry.isDirectory) {
+      const normRel = (entry.relativePath || "").replace(/\\/g, "/");
+      const normAbs = (entry.path || "").replace(/\\/g, "/");
+      const folderGit =
+        gitFolderMap.get(normRel) ||
+        gitFolderMap.get(normAbs) ||
+        (normRel.startsWith("./") ? gitFolderMap.get(normRel.slice(2)) : undefined) ||
+        (normRel ? gitFolderMap.get(normRel.split("/").pop() || "") : undefined);
+
       return (
         <div key={entry.path} className="relative">
           {/* Guide indent lines for parent levels */}
           {Array.from({ length: depth }).map((_, i) => (
             <span
               key={i}
-              className="absolute top-0 bottom-0 w-px bg-[#26262A] pointer-events-none"
+              className="absolute top-0 bottom-0 w-px bg-white/[0.06] pointer-events-none"
               style={{ left: `${i * 12 + 13}px` }}
             />
           ))}
 
           <div
-            className="group relative flex h-[22px] items-center justify-between hover:bg-[#202022] cursor-pointer select-none"
+            className="group relative flex h-[22px] items-center justify-between hover:bg-white/[0.04] cursor-pointer select-none transition-colors"
             style={{ paddingLeft: `${depth * 12 + 4}px` }}
             onClick={() => toggleDir(entry)}
             title={entry.path}
@@ -468,9 +580,9 @@ export function VsCodeFileExplorer({
                 )}
               </span>
 
-              {/* Tan folder icon matching Screenshot 1 & 3 */}
+              {/* Modern Folder Icon matching Screenshot 2 */}
               <div className="shrink-0 flex items-center justify-center">
-                {getFolderIcon(entry.name, isOpen)}
+                <ModernFolderIcon name={entry.name} isOpen={isOpen} />
               </div>
 
               {isRenaming ? (
@@ -489,10 +601,12 @@ export function VsCodeFileExplorer({
                 />
               ) : (
                 <div className="flex items-center gap-1.5 min-w-0 truncate">
-                  <span className={cn(
-                    "truncate text-[13px] leading-none font-sans tracking-normal",
-                    entry.name === "node_modules" ? "text-[#9E9EA4]" : "text-[#CCCCCC]"
-                  )}>
+                  <span
+                    className={cn(
+                      "truncate text-[13px] leading-none font-sans tracking-normal",
+                      entry.name === "node_modules" ? "text-[#85858A]" : "text-[#CCCCCC]"
+                    )}
+                  >
                     {entry.name}
                   </span>
                   {entry.name === "node_modules" && (
@@ -503,6 +617,17 @@ export function VsCodeFileExplorer({
                 </div>
               )}
             </div>
+
+            {/* Folder Git Status Dot (Screenshot 2: amber or green dot on right) */}
+            {folderGit && (
+              <span
+                className={cn(
+                  "w-1.5 h-1.5 rounded-full mr-2.5 shrink-0 group-hover:hidden select-none",
+                  folderGit === "M" ? "bg-[#CCA700]" : "bg-[#73C991]"
+                )}
+                title={folderGit === "M" ? "Contains modified files" : "Contains untracked files"}
+              />
+            )}
 
             {/* Folder hover actions */}
             <div className="hidden group-hover:flex items-center gap-px shrink-0 pr-1 text-[#8A8A8E]">
@@ -636,13 +761,25 @@ export function VsCodeFileExplorer({
     }
 
     // File node
+    const normRel = (entry.relativePath || "").replace(/\\/g, "/");
+    const normAbs = (entry.path || "").replace(/\\/g, "/");
+    const fileGit =
+      gitFileMap.get(normRel) ||
+      gitFileMap.get(normAbs) ||
+      (normRel.startsWith("./") ? gitFileMap.get(normRel.slice(2)) : undefined) ||
+      (normRel ? gitFileMap.get(normRel.split("/").pop() || "") : undefined);
+
+    const isGitModified = fileGit?.status === "M";
+    const isGitUntracked = fileGit?.status === "U" || fileGit?.status === "A";
+    const isGitDeleted = fileGit?.status === "D";
+
     return (
       <div key={entry.path} className="relative">
         {/* Guide indent lines for parent levels */}
         {Array.from({ length: depth }).map((_, i) => (
           <span
             key={i}
-            className="absolute top-0 bottom-0 w-px bg-[#26262A] pointer-events-none"
+            className="absolute top-0 bottom-0 w-px bg-white/[0.06] pointer-events-none"
             style={{ left: `${i * 12 + 13}px` }}
           />
         ))}
@@ -651,8 +788,8 @@ export function VsCodeFileExplorer({
           className={cn(
             "group relative flex h-[22px] items-center justify-between cursor-pointer select-none transition-colors",
             isActive
-              ? "bg-[#005fb8] text-white font-normal"
-              : "text-[#CCCCCC] hover:bg-[#202022]"
+              ? "bg-[#094771] text-white font-normal"
+              : "text-[#CCCCCC] hover:bg-white/[0.04]"
           )}
           style={{ paddingLeft: `${depth * 12 + 18}px` }}
           onClick={() => !isRenaming && editorApi.openFile(entry.path)}
@@ -676,15 +813,42 @@ export function VsCodeFileExplorer({
             <>
               <div className="flex items-center gap-[6px] min-w-0 truncate flex-1">
                 <div className="shrink-0 w-[16px] h-[16px] flex items-center justify-center">
-                  {getFileIcon(entry.name)}
+                  <ModernFileIcon name={entry.name} />
                 </div>
-                <span className={cn(
-                  "truncate text-[13px] leading-none font-sans",
-                  isActive ? "text-white font-medium" : "text-[#D0D0D0]"
-                )}>
+                <span
+                  className={cn(
+                    "truncate text-[13px] leading-none font-sans",
+                    isActive
+                      ? "text-white font-medium"
+                      : isGitModified
+                      ? "text-[#E2C08D]"
+                      : isGitUntracked
+                      ? "text-[#73C991]"
+                      : isGitDeleted
+                      ? "text-[#F14C4C]"
+                      : "text-[#CCCCCC]"
+                  )}
+                >
                   {entry.name}
                 </span>
               </div>
+
+              {/* Git Status indicator badge (M, U, D) matching Screenshot 2 */}
+              {fileGit && (
+                <span
+                  className={cn(
+                    "text-[11px] font-semibold font-mono mr-2.5 shrink-0 select-none group-hover:hidden",
+                    isGitModified
+                      ? "text-[#CCA700]"
+                      : isGitUntracked
+                      ? "text-[#73C991]"
+                      : "text-[#F14C4C]"
+                  )}
+                >
+                  {fileGit.status}
+                </span>
+              )}
+
               <div className="hidden group-hover:flex items-center gap-px shrink-0 pr-1 text-[#8A8A8E]">
                 <button
                   title="Rename…"
@@ -759,10 +923,8 @@ export function VsCodeFileExplorer({
               <button
                 onClick={() => setShowNodeModules((v) => !v)}
                 className={cn(
-                  "p-1 rounded transition-colors cursor-pointer",
-                  showNodeModules
-                    ? "text-[#38BDF8] bg-[#38BDF8]/15 hover:bg-[#38BDF8]/25"
-                    : "text-[#8E8E93] hover:text-white hover:bg-[#2A2A2E]"
+                  "p-1 rounded transition-colors cursor-pointer text-[#8E8E93] hover:text-white hover:bg-[#2A2A2E]",
+                  showNodeModules && "text-[#38BDF8]"
                 )}
                 title={showNodeModules ? "node_modules is visible (Click to hide)" : "node_modules is hidden (Click to show)"}
               >
@@ -770,6 +932,16 @@ export function VsCodeFileExplorer({
               </button>
             </>
           )}
+          <button
+            onClick={() => setInitFolderOpen((v) => !v)}
+            className={cn(
+              "p-1 rounded transition-colors cursor-pointer text-[#8E8E93] hover:text-white hover:bg-[#2A2A2E]",
+              initFolderOpen && "text-[#FF9E4A] bg-[#2A1D15]"
+            )}
+            title="⚡ Initialize Dedicated Project Folder (No file dialog needed)"
+          >
+            <Sparkles className="h-3.5 w-3.5" />
+          </button>
           <button
             onClick={openFolder}
             className="p-1 rounded text-[#8E8E93] hover:text-white hover:bg-[#2A2A2E] transition-colors cursor-pointer"
@@ -779,6 +951,62 @@ export function VsCodeFileExplorer({
           </button>
         </div>
       </div>
+
+      {/* Quick Project Initialization Inline Panel */}
+      {initFolderOpen && (
+        <div className="p-3 bg-gradient-to-b from-[#241B15] via-[#1B1917] to-[#141416] border-b border-[#3E2818] shadow-md shadow-black/40 flex flex-col gap-2.5 shrink-0 select-none">
+          <div className="flex items-center justify-between text-[11.5px] font-semibold text-[#FF9E4A]">
+            <div className="flex items-center gap-2">
+              <div className="h-5 w-5 rounded-[4px] bg-[#FF6B00]/15 border border-[#FF6B00]/40 flex items-center justify-center text-[#FF6B00] shadow-[0_0_8px_rgba(255,107,0,0.25)] shrink-0">
+                <Sparkles className="h-3 w-3" />
+              </div>
+              <span className="text-white font-medium">Initialize Project Folder</span>
+            </div>
+            <button
+              onClick={() => setInitFolderOpen(false)}
+              className="text-[#8E877F] hover:text-white p-0.5 rounded hover:bg-white/10 transition-colors cursor-pointer"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </div>
+          <div className="text-[11px] text-[#A69E96] leading-relaxed">
+            Creates a dedicated folder in <code className="text-[#FF9E4A] bg-[#2A1D15] border border-[#422918] px-1.5 py-0.5 rounded font-mono text-[10.5px]">~/Projects/</code> and switches workspace instantly.
+          </div>
+          <div className="flex items-center gap-1.5">
+            <input
+              type="text"
+              value={newProjectName}
+              onChange={(e) => setNewProjectName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleCreateAndOpenProject();
+                if (e.key === "Escape") setInitFolderOpen(false);
+              }}
+              placeholder="e.g. milkshake-store"
+              className="flex-1 bg-[#141210] border border-[#3E2818] focus:border-[#FF6B00] focus:ring-1 focus:ring-[#FF6B00]/30 text-[12px] text-white px-2.5 py-1.5 rounded outline-none placeholder:text-[#665D54] transition-all font-mono"
+              autoFocus
+            />
+            <button
+              onClick={() => handleCreateAndOpenProject()}
+              disabled={isInitializing}
+              className="px-3 py-1.5 bg-gradient-to-r from-[#FF6B00] to-[#EA580C] hover:from-[#FF7D1A] hover:to-[#F97316] text-white text-[11.5px] font-medium rounded transition-all cursor-pointer flex items-center gap-1.5 shadow-sm shadow-orange-500/25 disabled:opacity-50 shrink-0 active:scale-[0.98]"
+            >
+              {isInitializing ? <RotateCw className="h-3 w-3 animate-spin" /> : <FolderPlus className="h-3.5 w-3.5" />}
+              <span>Init</span>
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1 mt-0.5">
+            {["milkshake-store", "react-app", "nextjs-app", "api-server", "python-agent"].map((preset) => (
+              <button
+                key={preset}
+                onClick={() => handleCreateAndOpenProject(preset)}
+                className="px-2 py-0.5 text-[10px] bg-[#1E1914] hover:bg-[#2A2018] text-[#C4BCB5] hover:text-[#FF9E4A] rounded border border-[#38281C] hover:border-[#FF6B00]/50 transition-colors cursor-pointer font-mono"
+              >
+                +{preset}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {!editorApi.workspaceRoot ? (
         <div
@@ -803,16 +1031,66 @@ export function VsCodeFileExplorer({
               </div>
 
               {noFolderSectionOpen && (
-                <div className="px-5 py-3.5 flex flex-col gap-3 text-[12.5px] text-[#A6A6A6]">
-                  <div>You have not yet opened a folder.</div>
+                <div className="px-4 py-3 flex flex-col gap-3 text-[12.5px] text-[#A6A6A6]">
+                  {/* Initialize Dedicated Project Folder Card */}
+                  <div className="rounded-lg border border-[#422918] bg-gradient-to-b from-[#241B15] via-[#1E1B19] to-[#141416] p-3.5 flex flex-col gap-2.5 shadow-md shadow-black/40">
+                    <div className="flex items-center gap-2 text-[12px] font-semibold text-[#FF9E4A]">
+                      <div className="h-5 w-5 rounded-[4px] bg-[#FF6B00]/15 border border-[#FF6B00]/40 flex items-center justify-center text-[#FF6B00] shadow-[0_0_8px_rgba(255,107,0,0.25)] shrink-0">
+                        <Sparkles className="h-3 w-3" />
+                      </div>
+                      <span className="text-white font-medium tracking-tight">Initialize Dedicated Project Folder</span>
+                    </div>
+                    <div className="text-[11.5px] text-[#A69E96] leading-relaxed">
+                      Instantly initialize an isolated project in <code className="text-[#FF9E4A] bg-[#2A1D15] border border-[#422918] px-1.5 py-0.5 rounded font-mono text-[11px]">~/Projects/</code> without selecting through OS file dialogs.
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        type="text"
+                        value={newProjectName}
+                        onChange={(e) => setNewProjectName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleCreateAndOpenProject();
+                        }}
+                        placeholder="e.g. milkshake-store"
+                        className="flex-1 bg-[#141210] border border-[#3E2818] focus:border-[#FF6B00] focus:ring-1 focus:ring-[#FF6B00]/30 text-[12px] text-white px-2.5 py-1.5 rounded outline-none placeholder:text-[#665D54] transition-all font-mono"
+                      />
+                      <button
+                        onClick={() => handleCreateAndOpenProject()}
+                        disabled={isInitializing}
+                        className="px-3 py-1.5 bg-gradient-to-r from-[#FF6B00] to-[#EA580C] hover:from-[#FF7D1A] hover:to-[#F97316] text-white text-[12px] font-medium rounded transition-all cursor-pointer flex items-center gap-1.5 shadow-sm shadow-orange-500/25 disabled:opacity-50 active:scale-[0.98] shrink-0"
+                      >
+                        {isInitializing ? <RotateCw className="h-3.5 w-3.5 animate-spin" /> : <FolderPlus className="h-3.5 w-3.5" />}
+                        <span>Init</span>
+                      </button>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-0.5">
+                      {["milkshake-store", "react-app", "nextjs-app", "api-server", "python-agent"].map((preset) => (
+                        <button
+                          key={preset}
+                          onClick={() => handleCreateAndOpenProject(preset)}
+                          className="px-2 py-0.5 text-[10.5px] bg-[#1E1914] hover:bg-[#2A2018] text-[#C4BCB5] hover:text-[#FF9E4A] rounded border border-[#38281C] hover:border-[#FF6B00]/50 transition-colors cursor-pointer font-mono"
+                        >
+                          +{preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 my-1 text-[11px] text-[#66666A]">
+                    <div className="flex-1 h-px bg-[#26262A]" />
+                    <span>OR OPEN EXISTING</span>
+                    <div className="flex-1 h-px bg-[#26262A]" />
+                  </div>
+
                   <button
                     onClick={openFolder}
-                    className="w-full py-1.5 px-3 bg-[#0078D4] hover:bg-[#006CBE] text-white text-[12.5px] font-medium rounded-[3px] transition-colors cursor-pointer shadow-sm active:scale-[0.99] flex items-center justify-center"
+                    className="w-full py-2 px-3 bg-[#1C1C20] hover:bg-[#26262C] text-[#E0E0E6] hover:text-white text-[12px] font-medium rounded-[5px] transition-colors cursor-pointer shadow-sm active:scale-[0.99] flex items-center justify-center gap-2 border border-[#32323A]"
                   >
-                    Open Folder
+                    <Folder className="h-3.5 w-3.5 text-[#8E8E98]" />
+                    <span>Open Existing Folder…</span>
                   </button>
 
-                  <div className="mt-2">You can clone a repository locally.</div>
+                  <div className="mt-2 text-[12px] text-[#8E8E98]">You can clone a repository locally.</div>
                   <button
                     onClick={() => {
                       if (onCloneRepository) {
@@ -904,7 +1182,7 @@ export function VsCodeFileExplorer({
                       onClick={() => editorApi.setActiveFilePath(file.path)}
                       className={cn(
                         "group flex h-[22px] items-center justify-between px-5 text-[12px] cursor-pointer transition-colors",
-                        isActive ? "bg-[#005fb8] text-white" : "text-[#CCCCCC] hover:bg-[#202022]"
+                        isActive ? "bg-[#094771] text-white" : "text-[#CCCCCC] hover:bg-white/[0.04]"
                       )}
                     >
                       <div className="flex items-center gap-2 truncate">

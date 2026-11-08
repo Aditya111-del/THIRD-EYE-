@@ -139,12 +139,21 @@ export function SourceControlExplorer({ editorApi }: { editorApi: EditorWorkspac
     }
   }, [githubToken, verifyGitHubToken]);
 
+  const getTargetCwd = useCallback(() => {
+    return (
+      editorApi?.workspaceRoot ||
+      (typeof window !== "undefined" && (window as any).__THIRD_EYE_WORKSPACE_ROOT__) ||
+      ""
+    );
+  }, [editorApi?.workspaceRoot]);
+
   // Load Git status
   const loadStatus = useCallback(async () => {
     setLoading(true);
     try {
       if (window.electronAPI?.git?.status) {
-        const res = await window.electronAPI.git.status();
+        const targetCwd = getTargetCwd();
+        const res = await window.electronAPI.git.status({ cwd: targetCwd });
         if (res.success) {
           setIsRepo(res.isRepo !== false);
           setBranch(res.branch || "main");
@@ -172,7 +181,7 @@ export function SourceControlExplorer({ editorApi }: { editorApi: EditorWorkspac
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getTargetCwd]);
 
   useEffect(() => {
     loadStatus();
@@ -195,7 +204,7 @@ export function SourceControlExplorer({ editorApi }: { editorApi: EditorWorkspac
     if (isInitializing || !window.electronAPI?.git?.init) return;
     setIsInitializing(true);
     try {
-      const res = await window.electronAPI.git.init();
+      const res = await window.electronAPI.git.init({ cwd: getTargetCwd() });
       if (res.success) {
         await loadStatus();
       } else {
@@ -212,7 +221,7 @@ export function SourceControlExplorer({ editorApi }: { editorApi: EditorWorkspac
   const handleStageFile = async (e: React.MouseEvent, filePath: string) => {
     e.stopPropagation();
     if (window.electronAPI?.git?.stage) {
-      await window.electronAPI.git.stage(filePath);
+      await window.electronAPI.git.stage(filePath, { cwd: getTargetCwd() });
       await loadStatus();
     }
   };
@@ -220,7 +229,7 @@ export function SourceControlExplorer({ editorApi }: { editorApi: EditorWorkspac
   // Stage all files
   const handleStageAll = async () => {
     if (window.electronAPI?.git?.stage) {
-      await window.electronAPI.git.stage();
+      await window.electronAPI.git.stage(undefined, { cwd: getTargetCwd() });
       await loadStatus();
     }
   };
@@ -229,7 +238,7 @@ export function SourceControlExplorer({ editorApi }: { editorApi: EditorWorkspac
   const handleUnstageFile = async (e: React.MouseEvent, filePath: string) => {
     e.stopPropagation();
     if (window.electronAPI?.git?.unstage) {
-      await window.electronAPI.git.unstage(filePath);
+      await window.electronAPI.git.unstage(filePath, { cwd: getTargetCwd() });
       await loadStatus();
     }
   };
@@ -237,7 +246,7 @@ export function SourceControlExplorer({ editorApi }: { editorApi: EditorWorkspac
   // Unstage all
   const handleUnstageAll = async () => {
     if (window.electronAPI?.git?.unstage) {
-      await window.electronAPI.git.unstage();
+      await window.electronAPI.git.unstage(undefined, { cwd: getTargetCwd() });
       await loadStatus();
     }
   };
@@ -251,6 +260,7 @@ export function SourceControlExplorer({ editorApi }: { editorApi: EditorWorkspac
       await window.electronAPI.git.discard({
         filePath: file.path,
         isUntracked: file.isUntracked,
+        cwd: getTargetCwd(),
       });
       await loadStatus();
     }
@@ -267,6 +277,7 @@ export function SourceControlExplorer({ editorApi }: { editorApi: EditorWorkspac
         const res = await window.electronAPI.git.commit({
           message: commitMsg.trim(),
           stageAll: !hasStaged,
+          cwd: getTargetCwd(),
         });
 
         if (res.success) {
@@ -293,6 +304,7 @@ export function SourceControlExplorer({ editorApi }: { editorApi: EditorWorkspac
       const res = await window.electronAPI.git.push({
         branch,
         token: githubToken || undefined,
+        cwd: getTargetCwd(),
       });
       if (res.success) {
         await loadStatus();
@@ -312,6 +324,7 @@ export function SourceControlExplorer({ editorApi }: { editorApi: EditorWorkspac
       const res = await window.electronAPI.git.pull({
         branch,
         token: githubToken || undefined,
+        cwd: getTargetCwd(),
       });
       if (res.success) {
         await loadStatus();
@@ -329,10 +342,10 @@ export function SourceControlExplorer({ editorApi }: { editorApi: EditorWorkspac
     setSyncing(true);
     try {
       if (behind > 0 && window.electronAPI?.git?.pull) {
-        await window.electronAPI.git.pull({ branch, token: githubToken || undefined });
+        await window.electronAPI.git.pull({ branch, token: githubToken || undefined, cwd: getTargetCwd() });
       }
       if ((ahead > 0 || behind === 0) && window.electronAPI?.git?.push) {
-        await window.electronAPI.git.push({ branch, token: githubToken || undefined });
+        await window.electronAPI.git.push({ branch, token: githubToken || undefined, cwd: getTargetCwd() });
       }
       await loadStatus();
     } catch (err: any) {
@@ -347,7 +360,7 @@ export function SourceControlExplorer({ editorApi }: { editorApi: EditorWorkspac
     if (syncing || !window.electronAPI?.git?.fetch) return;
     setSyncing(true);
     try {
-      await window.electronAPI.git.fetch({ token: githubToken || undefined });
+      await window.electronAPI.git.fetch({ token: githubToken || undefined, cwd: getTargetCwd() });
       await loadStatus();
     } finally {
       setSyncing(false);

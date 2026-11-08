@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "allowJs": true,
+    "checkJs": false,
+    "strict": false,
+    "strictNullChecks": true,
+    "jsx": "react-jsx",
+    "types": ["node", "vite/client"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./Frontend/guide-build-main/src/*"],
+      "@third-eye/shared": ["./packages/shared/src/index.ts"]
+    }
+  },
+  "include": [
+    "Frontend/guide-build-main/src/**/*",
+    "backend/ai-service/src/**/*",
+    "backend/pty-service/src/**/*",
+    "packages/shared/src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "**/node_modules/**",
+    "dist",
+    "**/dist/**",
+    ".output",
+    "**/.output/**"
+  ]
+}

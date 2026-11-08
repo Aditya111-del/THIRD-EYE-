@@ -194,6 +194,21 @@ export function XtermView({ session }: XtermViewProps) {
           }
         } catch {}
 
+        setTimeout(() => {
+          if (disposed || !termRef.current || !fitAddonRef.current) return;
+          try {
+            fitAddonRef.current.fit();
+            const c = termRef.current.cols;
+            const r = termRef.current.rows;
+            const targetId = session.ptyId || session.id;
+            if (c > 0 && r > 0 && window.electronAPI && targetId) {
+              lastColsRef.current = c;
+              lastRowsRef.current = r;
+              window.electronAPI.terminal.resize(targetId, c, r);
+            }
+          } catch {}
+        }, 80);
+
         let lastLocalPasteTimestamp = 0;
         let lastLocalPastedContent = "";
 

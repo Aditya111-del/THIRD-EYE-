@@ -5,6 +5,14 @@ import { AgentContext, AgentEvent, AgentResult, PlanStep, ToolTrace, EditedFileM
 import { AgentLoop } from '../loop';
 import { Orchestrator } from '../orchestrator/orchestrator';
 import { getActiveRunningTasksSummary } from '../tools/runTerminal';
+import { executeInitProjectFolder } from '../tools/initProjectFolder';
+import {
+  checkWorkspaceSafety,
+  isProjectInitRequest,
+  extractProjectSlug,
+  deriveFallbackProjectSlug,
+  generateDirectoryAwarenessNotice,
+} from './workspaceSafety';
 
 export class AutonomousAgent extends BaseAgent {
   private loop: AgentLoop;
@@ -24,6 +32,12 @@ export class AutonomousAgent extends BaseAgent {
 
   public cancel(sessionId: string) {
     this.orchestrator.cancel(sessionId);
+    this.loop.cancel(sessionId);
+  }
+
+  public resetCancellation(sessionId: string) {
+    this.orchestrator.resetCancellation(sessionId);
+    this.loop.resetCancellation(sessionId);
   }
 
   public getOrchestrator(): Orchestrator {
@@ -33,14 +47,17 @@ export class AutonomousAgent extends BaseAgent {
   /**
    * Intelligently classify user intent:
    * 1. 'greeting': Casual hello/greeting -> simple 1-2 sentence friendly reply.
-   * 2. 'general_question': Pure theoretical/conceptual question with no workspace context -> direct Markdown answer.
-   * 3. 'direct_execution': Direct operational task (stop server, run/start dev server, test, inspect) -> fast direct loop with tools.
-   * 4. 'workspace_task': Full multi-agent DAG for engineering/scaffolding/refactoring.
+   * 2. 'project_init': User wants to start/initialize a project folder.
+   * 3. 'directory_awareness': Inquiry regarding current active directory.
+   * 4. 'general_question': Pure theoretical/conceptual question with no workspace context -> direct Markdown answer.
+   * 5. 'direct_execution': Direct operational task (stop server, run/start dev server, test, inspect) -> fast direct loop with tools.
+   * 6. 'workspace_task': Full multi-agent DAG for engineering/scaffolding/refactoring.
    */
   public classifyIntent(userPrompt: string, context: AgentContext): {
     intent: UserIntent;
     targetFileName?: string;
     targetCommand?: string;
+    targetProjectSlug?: string;
   } {
     const p = userPrompt.trim().toLowerCase();
     const activeFileName = context.activeFile?.name;
@@ -53,11 +70,32 @@ export class AutonomousAgent extends BaseAgent {
       return { intent: 'greeting' };
     }
 
-    // 2. Check for Stop / Kill Server or Process Operational Request
-    const isStopOrKill = /\b(stop|kill|terminate|halt|shutdown|close|cancel)\b/i.test(p);
-    const isRefactorOrScaffold = /\b(refactor|scaffold|architect|redesign|rewrite|multi-agent|plan|dag)\b/i.test(p);
+    // 2. CHECK FOR PROJECT INITIALIZATION / START PROJECT INTENT FIRST
+    if (isProjectInitRequest(userPrompt)) {
+      const slug = extractProjectSlug(userPrompt);
+      return {
+        intent: 'project_init',
+        targetProjectSlug: slug || undefined,
+      };
+    }
 
-    if (isStopOrKill && !isRefactorOrScaffold) {
+    // 3. CHECK FOR DIRECT DIRECTORY AWARENESS INQUIRY
+    if (/^(what directory|which directory|where am i|current directory|pwd|what folder|which folder|current path|working directory)\b/i.test(p)) {
+      return { intent: 'directory_awareness' };
+    }
+
+    // 3. CHECK FOR STATUS / PROCESS / RUNTIME OPERATIONAL INQUIRY
+    const isStatusCheck =
+      /\b(is it running|is anything running|is it up|is server running|is dev server running|is it working|status|check status|what is running|did it start|did it run|is it ready|is it alive)\b/i.test(p) ||
+      /\b(running|alive|online|active)\s*\??$/i.test(p);
+
+    if (isStatusCheck) {
+      return { intent: 'direct_execution' };
+    }
+
+    // 4. CHECK FOR STOP / KILL SERVER OR PROCESS OPERATIONAL REQUEST
+    const isStopOrKill = /\b(stop|kill|terminate|halt|shutdown|close|cancel)\b/i.test(p);
+    if (isStopOrKill) {
       return { intent: 'direct_execution' };
     }
 
@@ -67,47 +105,68 @@ export class AutonomousAgent extends BaseAgent {
       for (let i = context.history.length - 1; i >= 0; i--) {
         const h = context.history[i];
         const content = h.content || '';
+        let candidate: string | undefined;
         // 1. Look for markdown code blocks with bash/sh/npm/electron
         const codeBlockMatch = content.match(/```(?:bash|sh|shell|zsh)?\s*\n?([^\n`]+(?:npm|yarn|pnpm|bun|node|python|electron|git)[^\n`]*)```/i);
         if (codeBlockMatch && codeBlockMatch[1]) {
-          return codeBlockMatch[1].trim();
+          candidate = codeBlockMatch[1].trim();
         }
         // 2. Look for inline code commands
-        const inlineCodeMatch = content.match(/`((?:npm|yarn|pnpm|bun|node|python|electron)\s+[^`]+)`/i);
-        if (inlineCodeMatch && inlineCodeMatch[1]) {
-          return inlineCodeMatch[1].trim();
+        if (!candidate) {
+          const inlineCodeMatch = content.match(/`((?:npm|yarn|pnpm|bun|node|python|electron)\s+[^`]+)`/i);
+          if (inlineCodeMatch && inlineCodeMatch[1]) {
+            candidate = inlineCodeMatch[1].trim();
+          }
         }
         // 3. Look for "Suggested command: <cmd>"
-        const suggestedMatch = content.match(/Suggested command:\s*([^\n\r]+)/i);
-        if (suggestedMatch && suggestedMatch[1]) {
-          return suggestedMatch[1].trim();
+        if (!candidate) {
+          const suggestedMatch = content.match(/Suggested command:\s*([^\n\r]+)/i);
+          if (suggestedMatch && suggestedMatch[1]) {
+            candidate = suggestedMatch[1].trim();
+          }
         }
         // 4. Look for raw command mentions like npm run dev:full or npm run dev
-        const rawCmdMatch = content.match(/\b((?:npm|yarn|pnpm|bun)\s+run\s+[a-zA-Z0-9_\-:]+)\b/i);
-        if (rawCmdMatch && rawCmdMatch[1]) {
-          return rawCmdMatch[1].trim();
+        if (!candidate) {
+          const rawCmdMatch = content.match(/\b((?:npm|yarn|pnpm|bun)\s+run\s+[a-zA-Z0-9_\-:]+)\b/i);
+          if (rawCmdMatch && rawCmdMatch[1]) {
+            candidate = rawCmdMatch[1].trim();
+          }
+        }
+        // Filter out IDE internal commands (dev:full, pty, ai, vite, electron)
+        if (candidate && !/\b(dev:full|npm run pty|npm run ai|npm run vite|electron \.)\b/i.test(candidate)) {
+          return candidate;
         }
       }
       return undefined;
     };
 
-    // 2.4 Referential / Deictic execution ("run it", "do it", "start it", "execute it", "try it", "go ahead")
+    // 5. Referential / Deictic execution ("run it", "do it", "start it", "execute it", "try it", "go ahead")
+    // Strictly anchored so "run this project and add faq page" does NOT match
+    const cleanPrompt = p.replace(/[\?\!\.]+$/, '').trim();
     const isReferentialRun =
-      /^(run(\s+it|\s+this)?|do(\s+it|\s+this)?|start(\s+it|\s+this)?|execute(\s+it|\s+this)?|try(\s+it|\s+this)?|rerun(\s+it)?|re-run(\s+it)?|go\s+ahead|yes\s+do\s+it|just\s+run\s+it)\b/i.test(p) ||
-      p === 'run' || p === 'do it' || p === 'run it' || p === 'start it';
+      /^(run(\s+it|\s+this|\s+this\s+project|\s+the\s+project|\s+project|\s+the\s+app|\s+app)?|do(\s+it|\s+this)?|start(\s+it|\s+this|\s+this\s+project|\s+the\s+project|\s+project|\s+the\s+app|\s+app)?|execute(\s+it|\s+this)?|try(\s+it|\s+this)?|rerun(\s+it)?|re-run(\s+it)?|go\s+ahead|yes\s+do\s+it|just\s+run\s+it)$/i.test(cleanPrompt) ||
+      cleanPrompt === 'run' || cleanPrompt === 'do it' || cleanPrompt === 'run it' || cleanPrompt === 'start it' || cleanPrompt === 'run project' || cleanPrompt === 'run this project' || cleanPrompt === 'run the project';
 
     if (isReferentialRun) {
+      // 1. Safety guard FIRST: If workspace is the THIRD EYE IDE codebase itself, NEVER launch dev:full or internal IDE services
+      const safety = checkWorkspaceSafety(context.workspaceRoot);
+      if (safety.isProtected && safety.reason === 'third_eye_root') {
+        return { intent: 'general_question' };
+      }
+
+      // 2. Check for recent safe command mentioned in chat history
       const recentCmd = findRecentCommandFromHistory();
       if (recentCmd) {
         return { intent: 'direct_execution', targetCommand: recentCmd };
       }
-      // If no explicit command in history, check workspace package.json scripts
+
+      // 3. Check workspace package.json scripts (never run dev:full if in third-eye)
       const pkgPath = path.join(context.workspaceRoot, 'package.json');
       if (fs.existsSync(pkgPath)) {
         try {
           const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
           const scripts = pkg.scripts || {};
-          if (scripts['dev:full']) {
+          if (scripts['dev:full'] && pkg.name !== 'third-eye' && pkg.name !== 'third-eye-ide') {
             return { intent: 'direct_execution', targetCommand: 'npm run dev:full' };
           } else if (scripts['dev']) {
             return { intent: 'direct_execution', targetCommand: 'npm run dev' };
@@ -116,59 +175,101 @@ export class AutonomousAgent extends BaseAgent {
           }
         } catch {}
       }
+
+      // Check for split / multi-service projects (e.g. backend + frontend, server + client, api + web)
+      const servicePairs = [
+        { b: 'backend', f: 'frontend' },
+        { b: 'server', f: 'client' },
+        { b: 'api', f: 'web' },
+        { b: 'api', f: 'ui' },
+      ];
+      for (const pair of servicePairs) {
+        const bPkg = path.join(context.workspaceRoot, pair.b, 'package.json');
+        const fPkg = path.join(context.workspaceRoot, pair.f, 'package.json');
+        if (fs.existsSync(bPkg) && fs.existsSync(fPkg)) {
+          let bScript = 'dev';
+          let fScript = 'dev';
+          try {
+            const b = JSON.parse(fs.readFileSync(bPkg, 'utf-8'));
+            if (b.scripts?.dev) bScript = 'dev';
+            else if (b.scripts?.start) bScript = 'start';
+          } catch {}
+          try {
+            const f = JSON.parse(fs.readFileSync(fPkg, 'utf-8'));
+            if (f.scripts?.dev) fScript = 'dev';
+            else if (f.scripts?.start) fScript = 'start';
+          } catch {}
+          return {
+            intent: 'direct_execution',
+            targetCommand: `npm --prefix ${pair.b} run ${bScript} & npm --prefix ${pair.f} run ${fScript}`,
+          };
+        }
+      }
+
+      // Check single sub-folders with package.json
+      for (const sub of ['backend', 'frontend', 'server', 'client', 'app', 'web', 'ui']) {
+        const subPkg = path.join(context.workspaceRoot, sub, 'package.json');
+        if (fs.existsSync(subPkg)) {
+          try {
+            const pkg = JSON.parse(fs.readFileSync(subPkg, 'utf-8'));
+            const scripts = pkg.scripts || {};
+            const script = scripts['dev:full'] ? 'dev:full' : scripts['dev'] ? 'dev' : scripts['start'] ? 'start' : null;
+            if (script) {
+              return { intent: 'direct_execution', targetCommand: `npm --prefix ${sub} run ${script}` };
+            }
+          } catch {}
+        }
+      }
+
       return { intent: 'direct_execution' };
     }
 
-    // 2.5 Explicit CLI command invocation (e.g. "npm run dev:full", "npm run dev", "npm test")
+    // 6. Explicit CLI command invocation (e.g. "npm run dev:full", "npm run dev", "npm test")
     const explicitCliMatch = p.match(/^((?:npm|yarn|pnpm|bun|node|python|npx)\s+[a-zA-Z0-9_\-:\/\.\s]+)$/i);
     if (explicitCliMatch && explicitCliMatch[1]) {
       return { intent: 'direct_execution', targetCommand: explicitCliMatch[1].trim() };
     }
 
-    // 2.6 Continuation / Retry of previous task
+    // 7. Continuation / Retry of previous task
     const isContinuation = /\b(retry|continue|resume|proceed|keep going|try again|repeat|re-run)\b/i.test(p);
     if (isContinuation) {
       return { intent: 'workspace_task' };
     }
 
-    // 3. Check for File Mentions or Workspace References
-    const mentionsFile =
-      /\b(this file|active file|current file|open file|package\.json|tsconfig\.json|dockerfile)\b/i.test(p) ||
-      /\b[a-zA-Z0-9_\-\.\/]+\.(ts|tsx|js|jsx|css|json|html|py|go|java|rs|sql|md|sh)\b/i.test(p) ||
-      (activeFileName && p.includes(activeFileName.toLowerCase()));
+    // 8. Explicit Command to Mutate Workspace / Build Features
+    const isExplicitAgentAction =
+      /^(can\s+you|could\s+you|please|would\s+you|go\s+ahead\s+and)\s+(add|create|build|implement|make|write|edit|modify|update|fix|patch|repair|refactor|delete|remove|install)\b/i.test(p) ||
+      /^(add|create|build|implement|make|write|edit|modify|update|fix|patch|repair|refactor|scaffold|redesign|rewrite|delete|remove|install)\b/i.test(p);
 
-    // 4. Direct Operational Task (run, start dev server, inspect & run, check status, etc.)
-    const isDirectOperational =
-      /\b(run|start|dev|launch|serve|npm|yarn|pnpm|bun|test|inspect|check|open preview|nom)\b/i.test(p) &&
-      !isRefactorOrScaffold;
+    // 9. NORMAL QUERIES & INQUIRIES: Questions about the app, concepts, code, explanation, architecture
+    // Examples: "what this app do ?", "what does this app do", "what is this project", "explain this app",
+    // "tell me about this app", "how does this work", "how do i use this", "what is python", "teach python", etc.
+    const isQuestionOrInquiry =
+      /^(what|why|how|who|where|which|when|is|are|can|could|would|should|does|do|did|explain|describe|tell me|give me an overview|overview|summarize|summary|walk me through|help me understand|show me)\b/i.test(p) ||
+      /\?$/.test(p) ||
+      /\b(what does this|what this|what is this|tell me about|explain this|how does this|how do i|how to)\b/i.test(p);
 
-    if (isDirectOperational) {
+    if (isQuestionOrInquiry && !isExplicitAgentAction) {
+      return { intent: 'general_question' };
+    }
+
+    // 10. Workspace modification action verbs
+    const hasCodeOrFeatureAction =
+      /\b(add|create|build|implement|make|code|write|edit|modify|update|fix|patch|repair|refactor|scaffold|design|style|redesign|rewrite|delete|remove)\b/i.test(p) ||
+      /\b(and\s+(?:add|create|build|make|fix|edit|modify|update|code|implement|run|start))\b/i.test(p);
+
+    if (hasCodeOrFeatureAction) {
       let detectedFile = activeFileName;
       const fileMatch = p.match(/\b([a-zA-Z0-9_\-\.\/]+\.(ts|tsx|js|jsx|css|json|html|py|go|java|rs|sql))\b/i);
       if (fileMatch && fileMatch[1]) detectedFile = fileMatch[1];
-      return { intent: 'direct_execution', targetFileName: detectedFile };
-    }
-
-    // 5. Check for Workspace Engineering Action Verbs
-    const hasEngineeringAction =
-      /\b(make|setup|develop|author|code|debug|compile|build|fix|correct|solve|patch|repair|edit|modify|update|refactor|migrate|reorganize|cleanup|clean up|remove|delete|add|create|implement|scaffold|generate|write|test|lint|typecheck|check|diagnose|inspect|audit|review|run|execute|install|start|find|search|where is|what does this|retry|resume|continue)\b/i.test(p);
-
-    // 6. Check for Workspace / Project Terminology
-    const hasWorkspaceContext =
-      /\b(terminal|console|compiler|syntax|linter|error|bug|warning|exception|stack trace|repo|project|codebase|app|server|client|frontend|backend|website|page|route|component|screen|feature|site|ui)\b/i.test(p);
-
-    // If it mentions any file, any engineering action, or workspace context:
-    if (mentionsFile || hasEngineeringAction || hasWorkspaceContext) {
-      let detectedFile = activeFileName;
-      const fileMatch = p.match(/\b([a-zA-Z0-9_\-\.\/]+\.(ts|tsx|js|jsx|css|json|html|py|go|java|rs|sql))\b/i);
-      if (fileMatch && fileMatch[1]) {
-        detectedFile = fileMatch[1];
-      }
       return { intent: 'workspace_task', targetFileName: detectedFile };
     }
 
-    // 7. General conceptual question (e.g., "what is python", "teach python", "what is a closure")
-    return { intent: 'general_question' };
+    // Default: If it's a question mark or general statement, treat as general_question; else workspace_task
+    if (p.includes('?') || p.split(' ').length <= 4) {
+      return { intent: 'general_question' };
+    }
+    return { intent: 'workspace_task', targetFileName: activeFileName };
   }
 
   public async execute(
@@ -178,6 +279,7 @@ export class AutonomousAgent extends BaseAgent {
   ): Promise<AgentResult> {
     const startTime = Date.now();
     const sessionId = context.sessionId || `session-${Date.now()}`;
+    this.resetCancellation(sessionId);
     const matchedSkills = this.skillManager.matchSkills(userPrompt);
     const classification = this.classifyIntent(userPrompt, context);
     const targetName = classification.targetFileName || context.activeFile?.name;
@@ -196,6 +298,7 @@ Do NOT dump tutorials, code snippets, or architecture explanations. Keep it a cl
         sessionId,
         apiKey: context.apiKey,
         model: context.model,
+        images: context.images,
         tools: [], // No tools needed for greetings
         maxIterations: 1,
         envelope: {
@@ -206,7 +309,7 @@ Do NOT dump tutorials, code snippets, or architecture explanations. Keep it a cl
         },
         onDelta: (delta) => {
           emitEvent({
-            type: 'delta',
+            type: 'agent.delta',
             sessionId,
             data: { delta },
           });
@@ -230,10 +333,48 @@ Do NOT dump tutorials, code snippets, or architecture explanations. Keep it a cl
       return result;
     }
 
-    // PATH 2: GENERAL CONCEPTUAL QUESTION (e.g. "what is python", "teach python", "what is a closure")
+    // PATH 2: GENERAL CONCEPTUAL QUESTION OR REPO INQUIRY (e.g. "what this app do ?", "what is python", "explain this project")
     if (classification.intent === 'general_question') {
+      const safety = checkWorkspaceSafety(context.workspaceRoot);
+      if (safety.reason === 'third_eye_root' && /\b(run|start|launch|dev|dev:full)\b/i.test(userPrompt)) {
+        const reply = `### ⚡ THIRD EYE IDE is Already Running!
+
+You are currently inside the active **THIRD EYE IDE** workspace:
+- 🖥️ **Desktop Client**: Active window
+- 🌐 **Frontend (Vite UI)**: [http://localhost:3000](http://localhost:3000)
+- ⚙️ **PTY Terminal Microservice**: Running on port \`4001\`
+- 🧠 **AI Agent Microservice**: Running on port \`4002\`
+
+To run or build your own project (e.g. **SHAMSH TRADER** or a new app):
+1. Use **File → Open Folder** to switch to your project folder.
+2. Or tell me \`init project <name>\` to create an isolated project workspace.
+3. Once in your project folder, \`run this project\` will start your app on its own dedicated port (e.g., \`5173\`) without colliding with the IDE!`;
+
+        emitEvent({
+          type: 'agent.delta',
+          sessionId,
+          data: { delta: reply },
+        });
+
+        const totalSeconds = Math.max(1, Math.round((Date.now() - startTime) / 1000));
+        const result: AgentResult = {
+          reply,
+          thoughtDuration: `${totalSeconds}s`,
+          thoughts: ['Workspace is THIRD EYE root — IDE is already active on ports 3000/4001/4002.'],
+          iterations: 1,
+        };
+
+        emitEvent({
+          type: 'finish',
+          sessionId,
+          data: result,
+        });
+
+        return result;
+      }
+
       const thoughts = [
-        `Addressing query: ${userPrompt.slice(0, 45)}`,
+        'Analyzing query and context...',
       ];
 
       emitEvent({
@@ -245,12 +386,54 @@ Do NOT dump tutorials, code snippets, or architecture explanations. Keep it a cl
         },
       });
 
-      const questionPrompt = `You are THIRD_EYE, an elite AI pair programmer and computer science mentor in the developer's IDE.
+      // Extract rich workspace context if available so repo/app inquiries are answered with high fidelity
+      let workspaceContextText = '';
+      if (context.workspaceRoot && fs.existsSync(context.workspaceRoot)) {
+        try {
+          const pkgPath = path.join(context.workspaceRoot, 'package.json');
+          let pkgInfo = '';
+          if (fs.existsSync(pkgPath)) {
+            try {
+              const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf-8'));
+              pkgInfo = `Package Name: ${pkg.name || 'Unnamed'}\nDescription: ${pkg.description || 'None'}\nScripts: ${Object.keys(pkg.scripts || {}).join(', ')}\nMain Dependencies: ${Object.keys(pkg.dependencies || {}).slice(0, 20).join(', ')}`;
+            } catch {}
+          }
+
+          let readmeExcerpt = '';
+          const readmePath = path.join(context.workspaceRoot, 'README.md');
+          if (fs.existsSync(readmePath)) {
+            try {
+              const readmeContent = fs.readFileSync(readmePath, 'utf-8');
+              readmeExcerpt = readmeContent.slice(0, 2500);
+            } catch {}
+          }
+
+          let topLevelEntries: string[] = [];
+          try {
+            topLevelEntries = fs.readdirSync(context.workspaceRoot)
+              .filter(f => !f.startsWith('.') && f !== 'node_modules' && f !== 'dist' && f !== '.git')
+              .slice(0, 25);
+          } catch {}
+
+          workspaceContextText = `
+Workspace Context:
+- Project Root: ${context.workspaceRoot}
+- Project Directory: ${path.basename(context.workspaceRoot)}
+${pkgInfo ? `- Package Overview:\n${pkgInfo}` : ''}
+${readmeExcerpt ? `- README:\n${readmeExcerpt}` : ''}
+${topLevelEntries.length > 0 ? `- Top-level Files/Folders: ${topLevelEntries.join(', ')}` : ''}
+${context.activeFile?.name ? `- Active File: ${context.activeFile.name}` : ''}
+`;
+        } catch {}
+      }
+
+      const questionPrompt = `You are THIRD_EYE, an elite AI pair programmer operating inside the developer's IDE.
 The developer asked: "${userPrompt}".
-Answer the question directly, accurately, and naturally in clean Markdown.
-Provide clear explanations and syntax-highlighted code examples where appropriate.
-Match the depth and scope of your response to what was asked.
-Do NOT invoke tools or inspect workspace files for general conceptual questions.`;
+${workspaceContextText ? `\n${workspaceContextText}\n` : ''}
+Instructions:
+1. If the developer is asking what this app or project does, what it is for, its architecture, or features, use the workspace context above to give an immediate, well-structured, and helpful explanation in clean GitHub-style Markdown.
+2. If the developer asked a general conceptual, language, or algorithm question, explain clearly with syntax-highlighted code blocks where appropriate.
+3. Be direct, conversational, and precise. Match the depth of your explanation to what was asked.`;
 
       const loopResult = await this.loop.run({
         userMessage: userPrompt,
@@ -258,6 +441,7 @@ Do NOT invoke tools or inspect workspace files for general conceptual questions.
         sessionId,
         apiKey: context.apiKey,
         model: context.model,
+        images: context.images,
         tools: [], // Bypassing tools guarantees direct text streaming without unwanted file reads
         maxIterations: 1,
         envelope: {
@@ -268,7 +452,7 @@ Do NOT invoke tools or inspect workspace files for general conceptual questions.
         },
         onDelta: (delta) => {
           emitEvent({
-            type: 'delta',
+            type: 'agent.delta',
             sessionId,
             data: { delta },
           });
@@ -299,6 +483,144 @@ Do NOT invoke tools or inspect workspace files for general conceptual questions.
       return result;
     }
 
+    // PATH 1.5: DIRECTORY AWARENESS INQUIRY (e.g. "what directory is this", "where am i")
+    if (classification.intent === 'directory_awareness') {
+      const safety = checkWorkspaceSafety(context.workspaceRoot);
+      const notice = generateDirectoryAwarenessNotice(safety);
+
+      emitEvent({
+        type: 'agent.delta',
+        sessionId,
+        data: { delta: notice },
+      });
+
+      const totalSeconds = Math.max(1, Math.round((Date.now() - startTime) / 1000));
+      const result: AgentResult = {
+        reply: notice,
+        thoughtDuration: `${totalSeconds}s`,
+        thoughts: [`Directory awareness check: ${safety.currentDirectory} (${safety.directoryName})`],
+        iterations: 1,
+      };
+
+      emitEvent({
+        type: 'finish',
+        sessionId,
+        data: result,
+      });
+
+      return result;
+    }
+
+    // PATH 1.6: EXPLICIT PROJECT INITIALIZATION (e.g. "start project", "init project milkshake-bar")
+    if (classification.intent === 'project_init') {
+      const safety = checkWorkspaceSafety(context.workspaceRoot);
+
+      if (classification.targetProjectSlug) {
+        const folderName = classification.targetProjectSlug;
+        emitEvent({
+          type: 'status',
+          sessionId,
+          data: { status: `Initializing project folder "${folderName}"...` },
+        });
+
+        const initRes = await executeInitProjectFolder({ folderName }, context.workspaceRoot);
+
+        // Switch workspace context
+        context.workspaceRoot = initRes.projectPath;
+        this.setWorkspaceRoot(initRes.projectPath);
+
+        emitEvent({
+          type: 'workspace.root_switched',
+          sessionId,
+          data: {
+            root: initRes.projectPath,
+            name: initRes.folderName,
+          },
+        });
+
+        emitEvent({
+          type: 'agent.status',
+          sessionId,
+          data: {
+            agentId: 'ProjectInitializer',
+            status: `Project folder ready at ${initRes.projectPath}`,
+            message: `Project folder ready at ${initRes.projectPath}`,
+          },
+        });
+
+        // Check if user also gave instructions beyond just naming the folder
+        const pClean = userPrompt
+          .replace(/(?:start|init|initialize|create|make|setup)\s+(?:a\s+|an\s+|the\s+)?(?:new\s+)?(?:project|app|folder)\s+(?:named|called|in|as|titled|for)?\s+[a-zA-Z0-9_\-\.]+/i, '')
+          .trim();
+        const hasFurtherInstructions =
+          pClean.length > 5 &&
+          /\b(with|using|build|add|create|make|react|vite|next|vue|node|express|python|flask|django|tailwind|typescript)\b/i.test(pClean);
+
+        if (!hasFurtherInstructions) {
+          const reply = `### 🎉 Project Initialized Successfully!
+
+- **Project Name**: \`${initRes.folderName}\`
+- **Location**: \`${initRes.projectPath}\`
+- **Active Workspace**: Switched to \`${initRes.folderName}\`
+- **Isolation**: Dedicated folder outside of \`${safety.directoryName}\`
+
+Your workspace and terminal have been automatically switched to this isolated folder. The core **THIRD EYE IDE** codebase is fully protected.
+
+What would you like to build in **${initRes.folderName}**?
+- \`npm create vite@latest . -- --template react-ts\`
+- \`npx create-next-app@latest .\`
+- Or tell me what features or architecture you want, and I'll generate the full implementation!`;
+
+          emitEvent({
+            type: 'agent.delta',
+            sessionId,
+            data: { delta: reply },
+          });
+
+          const totalSeconds = Math.max(1, Math.round((Date.now() - startTime) / 1000));
+          const result: AgentResult = {
+            reply,
+            thoughtDuration: `${totalSeconds}s`,
+            thoughts: [`Initialized isolated project folder at ${initRes.projectPath}`],
+            iterations: 1,
+          };
+
+          emitEvent({
+            type: 'finish',
+            sessionId,
+            data: result,
+          });
+
+          return result;
+        }
+        // If hasFurtherInstructions, execution falls through to PATH 3 targeting the new clean workspace!
+      } else {
+        // No folder name specified by user: Show directory awareness & request folder name / offer presets
+        const notice = generateDirectoryAwarenessNotice(safety);
+        emitEvent({
+          type: 'agent.delta',
+          sessionId,
+          data: { delta: notice },
+        });
+
+        const totalSeconds = Math.max(1, Math.round((Date.now() - startTime) / 1000));
+        const result: AgentResult = {
+          reply: notice,
+          thoughtDuration: `${totalSeconds}s`,
+          thoughts: [`Directory awareness check: ${safety.currentDirectory} (${safety.directoryName})`],
+          iterations: 1,
+        };
+
+        emitEvent({
+          type: 'finish',
+          sessionId,
+          data: result,
+        });
+
+        return result;
+      }
+    }
+
     // PATH 2.5: DIRECT OPERATIONAL TASK (Inspect files, run commands, start/stop dev servers)
     if (classification.intent === 'direct_execution') {
       const isStopPrompt = /\b(stop|kill|terminate|halt|shutdown|close|cancel)\b/i.test(userPrompt);
@@ -321,6 +643,10 @@ Do NOT invoke tools or inspect workspace files for general conceptual questions.
 
       const runningTasksSummary = getActiveRunningTasksSummary();
 
+      const isStatusCheck =
+        /\b(is it running|is anything running|is it up|is server running|is dev server running|is it working|status|check status|what is running|did it start|did it run|is it ready|is it alive)\b/i.test(userPrompt) ||
+        /\b(running|alive|online|active)\s*\??$/i.test(userPrompt);
+
       let directPrompt = '';
       if (isStopPrompt) {
         directPrompt = `You are THIRD_EYE, an elite autonomous developer assistant.
@@ -334,6 +660,21 @@ CRITICAL ACTION REQUIRED - STOPPING / KILLING:
 - You MUST immediately invoke the "stop_server" tool.
 - Do NOT invoke run_terminal, do NOT run build or install commands.
 - Provide a clean, direct confirmation once stopped.`;
+      } else if (isStatusCheck) {
+        directPrompt = `You are THIRD_EYE, an elite autonomous developer assistant operating inside the developer's IDE with real system access.
+Workspace: ${context.workspaceRoot}
+The developer asked about process/server runtime status: "${userPrompt}".
+
+## ACTIVE RUNNING PROCESSES & BACKGROUND TASKS:
+${runningTasksSummary}
+
+CRITICAL INSTRUCTIONS:
+1. Examine the active running processes, background tasks, and terminal output above.
+2. If background tasks or dev servers are running, report their status, task ID, command, and any preview URLs (e.g. http://localhost:3000 or http://localhost:5173).
+3. If NO background tasks or dev servers are currently running:
+   - State clearly: "No background dev server or process is currently running."
+   - Check the workspace package.json scripts or project structure to offer or run the appropriate dev command.
+4. NEVER claim you are an AI model that cannot run code on local machine. You are THIRD_EYE with active terminal and background process execution tools.`;
       } else if (targetCommand) {
         const isLongRunning = /\b(run dev|dev:full|start|serve|watch|preview)\b/i.test(targetCommand);
         directPrompt = `You are THIRD_EYE, an elite autonomous developer assistant.
@@ -348,18 +689,30 @@ CRITICAL INSTRUCTIONS - DIRECT EXECUTION:
 3. If node_modules already exists, DO NOT run install commands.
 4. After invoking run_terminal, confirm the command is running and return a clean, concise response with the command output or URL.`;
       } else {
+        let multiServiceNote = '';
+        const bPkg = path.join(context.workspaceRoot, 'backend', 'package.json');
+        const fPkg = path.join(context.workspaceRoot, 'frontend', 'package.json');
+        if (fs.existsSync(bPkg) && fs.existsSync(fPkg)) {
+          multiServiceNote = `\nDETECTED MULTI-SERVICE PROJECT (Backend + Frontend):
+- Run backend dev server: run_terminal with command "npm --prefix backend run dev" (background: true)
+- Run frontend dev server: run_terminal with command "npm --prefix frontend run dev" (background: true)
+Execute run_terminal for BOTH so both the API and UI are live!`;
+        }
+
         directPrompt = `You are THIRD_EYE, an elite autonomous developer assistant.
 Workspace: ${context.workspaceRoot}
 The developer asked: "${userPrompt}".
+${multiServiceNote}
 
 ## ACTIVE RUNNING PROCESSES & BACKGROUND TASKS:
 ${runningTasksSummary}
 
 Proactively:
 1. If the command or script to run is known or present in package.json, execute it with run_terminal immediately (background: true for dev servers).
-2. DO NOT run analyze_codebase repeatedly or write redundant context files.
-3. If node_modules already exists, DO NOT run install commands.
-4. Return a concise, clear explanation of what was run.`;
+2. If multi-service (e.g. backend + frontend), start BOTH services using run_terminal (background: true).
+3. DO NOT run analyze_codebase repeatedly or write redundant context files.
+4. If node_modules already exists, DO NOT run install commands.
+5. Return a concise, clear explanation of the running services, ports, and preview URLs.`;
       }
 
       // Initialize Antigravity Artifacts only if full inspection or complex task
@@ -401,7 +754,8 @@ Proactively:
         sessionId,
         apiKey: context.apiKey,
         model: context.model,
-        maxIterations: 8,
+        images: context.images,
+        maxIterations: 20, // Generous budget for inspection, starting multi-service dev servers, and status confirmation
         envelope: {
           systemPrompt: directPrompt,
           openTabs: context.openTabs,
@@ -410,12 +764,17 @@ Proactively:
         },
         onDelta: (delta) => {
           emitEvent({
-            type: 'delta',
+            type: 'agent.delta',
             sessionId,
             data: { delta },
           });
         },
         onToolCall: (tc) => {
+          emitEvent({
+            type: 'tool.start',
+            sessionId,
+            data: { agentId: 'DirectWorker', name: tc.name, args: tc.args, risk: 'exec' },
+          });
           emitEvent({
             type: 'tool_call',
             sessionId,
@@ -423,6 +782,11 @@ Proactively:
           });
         },
         onToolResult: (tr) => {
+          emitEvent({
+            type: 'tool.end',
+            sessionId,
+            data: { agentId: 'DirectWorker', name: tr.toolName, result: tr.data || { success: tr.success, error: tr.error } },
+          });
           emitEvent({
             type: 'tool_result',
             sessionId,
@@ -446,6 +810,11 @@ Proactively:
         },
         onStatus: (status) => {
           emitEvent({
+            type: 'agent.status',
+            sessionId,
+            data: { agentId: 'DirectWorker', status, message: status },
+          });
+          emitEvent({
             type: 'status',
             sessionId,
             data: { status },
@@ -454,7 +823,7 @@ Proactively:
       });
 
       const totalSeconds = Math.max(1, Math.round((Date.now() - startTime) / 1000));
-      const resultReply = loopResult.reply || 'Task completed successfully.';
+      const resultReply = loopResult.reply || 'Execution complete. Checked status and verified runtime processes.';
 
       // Finalize direct execution artifacts
       const completedStep = {
@@ -494,6 +863,12 @@ Proactively:
       };
 
       emitEvent({
+        type: 'agent.done',
+        sessionId,
+        data: { agentId: 'DirectWorker', summary: resultReply },
+      });
+
+      emitEvent({
         type: 'finish',
         sessionId,
         data: result,
@@ -503,6 +878,39 @@ Proactively:
     }
 
     // PATH 3: WORKSPACE ENGINEERING TASK (Cursor Agent / Google Antigravity autonomous multi-agent execution)
+    // Protection check: Never scaffold or dump project files into THIRD_EYE IDE codebase, home dir, or root!
+    const safety = checkWorkspaceSafety(context.workspaceRoot);
+    let autoProjectNotice = '';
+    if (safety.isProtected) {
+      const fallbackSlug = deriveFallbackProjectSlug(userPrompt);
+      emitEvent({
+        type: 'agent.status',
+        sessionId,
+        data: {
+          agentId: 'DirectoryGuard',
+          status: `Protected directory detected (${safety.currentDirectory}). Initializing isolated project folder "${fallbackSlug}"...`,
+          message: `Protected directory detected (${safety.currentDirectory}). Initializing isolated project folder "${fallbackSlug}"...`,
+        },
+      });
+
+      const initRes = await executeInitProjectFolder({ folderName: fallbackSlug }, context.workspaceRoot);
+
+      // Switch context and orchestrator to the safe project folder
+      context.workspaceRoot = initRes.projectPath;
+      this.setWorkspaceRoot(initRes.projectPath);
+
+      emitEvent({
+        type: 'workspace.root_switched',
+        sessionId,
+        data: {
+          root: initRes.projectPath,
+          name: initRes.folderName,
+        },
+      });
+
+      autoProjectNotice = `> 📍 **Protected Directory Notice**: Active directory was \`${safety.currentDirectory}\` (${safety.directoryName}). To protect your IDE codebase from pollution, your project was initialized in a dedicated folder at **\`${initRes.projectPath}\`** and your workspace was automatically switched there.\n\n`;
+    }
+
     const targetLabel = targetName || 'workspace';
     const thoughts = [
       `1. Formulating Task Graph DAG targeting: ${targetLabel}`,
@@ -535,6 +943,9 @@ Proactively:
 
     const orchResult = await this.orchestrator.execute(effectiveTaskPrompt, {
       workspaceRoot: context.workspaceRoot,
+      cwd: context.cwd,
+      cwdTree: context.cwdTree || context.directoryTree,
+      directoryTree: context.directoryTree || context.cwdTree,
       sessionId,
       apiKey: context.apiKey,
       model: context.model,
@@ -542,18 +953,13 @@ Proactively:
       terminalTail: context.terminalTail,
       activeFile: context.activeFile,
       history: context.history as any,
+      images: context.images,
       onEvent: (event: any) => {
         // 1. Emit typed event directly
         emitEvent(event);
 
-        // 2. Map to legacy events for complete UI compatibility
-        if (event.type === 'agent.delta') {
-          emitEvent({
-            type: 'delta',
-            sessionId,
-            data: { delta: event.data?.delta },
-          });
-        } else if (event.type === 'task.graph') {
+        // 2. Map to legacy events for complete UI compatibility (without duplicating deltas)
+        if (event.type === 'task.graph') {
           emitEvent({
             type: 'plan',
             sessionId,
@@ -644,7 +1050,7 @@ Proactively:
 
     const totalSeconds = Math.max(1, Math.round((Date.now() - startTime) / 1000));
     const result: AgentResult = {
-      reply: orchResult.summary,
+      reply: autoProjectNotice ? `${autoProjectNotice}${orchResult.summary}` : orchResult.summary,
       thoughtDuration: `${totalSeconds}s`,
       thoughts,
       plan: orchResult.steps.map((s) => ({

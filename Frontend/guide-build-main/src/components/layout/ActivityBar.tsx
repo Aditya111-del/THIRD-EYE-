@@ -97,7 +97,8 @@ export function ActivityBar({
   useEffect(() => {
     const updateGitBadge = () => {
       if (window.electronAPI?.git?.status) {
-        window.electronAPI.git.status().then((res: any) => {
+        const targetCwd = (typeof window !== "undefined" && (window as any).__THIRD_EYE_WORKSPACE_ROOT__) || "";
+        window.electronAPI.git.status({ cwd: targetCwd }).then((res: any) => {
           if (res?.success) {
             if (res.isRepo === false) {
               setGitBadge(undefined);

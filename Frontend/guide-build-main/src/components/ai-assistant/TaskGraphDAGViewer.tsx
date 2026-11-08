@@ -12,6 +12,7 @@ import {
   Search,
   Wrench,
   Check,
+  Square,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -30,9 +31,10 @@ export interface TaskGraphStepUI {
 interface TaskGraphDAGViewerProps {
   steps: TaskGraphStepUI[];
   activeAgentId?: string;
+  onStop?: () => void;
 }
 
-export function TaskGraphDAGViewer({ steps, activeAgentId }: TaskGraphDAGViewerProps) {
+export function TaskGraphDAGViewer({ steps, activeAgentId, onStop }: TaskGraphDAGViewerProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
 
@@ -77,10 +79,26 @@ export function TaskGraphDAGViewer({ steps, activeAgentId }: TaskGraphDAGViewerP
 
         <div className="flex items-center gap-2.5">
           {runningSteps > 0 && (
-            <span className="flex items-center gap-1.5 text-[11px] text-[#38BDF8] font-mono">
-              <span className="h-2 w-2 rounded-full bg-[#38BDF8] animate-ping" />
-              Running ({runningSteps})
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 text-[11px] text-[#38BDF8] font-mono">
+                <span className="h-2 w-2 rounded-full bg-[#38BDF8] animate-ping" />
+                Running ({runningSteps})
+              </span>
+              {onStop && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onStop();
+                  }}
+                  className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-600 hover:bg-rose-500 text-white text-[10.5px] font-mono cursor-pointer transition-colors shadow-xs"
+                  title="Emergency Stop Agent"
+                >
+                  <Square className="h-2.5 w-2.5 fill-current" />
+                  <span>Stop</span>
+                </button>
+              )}
+            </div>
           )}
           {failedSteps > 0 && (
             <span className="text-[11px] text-[#EF4444] font-mono font-medium">

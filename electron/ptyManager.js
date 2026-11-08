@@ -29,6 +29,77 @@ class PTYManager {
     this.buffers = new Map();
     this.defaultOnData = null;
     this.defaultOnExit = null;
+    this.onCwdChanged = null;
+    this._cwdCheckTimers = new Map();
+  }
+
+  /**
+   * Register a listener for terminal session working directory updates
+   * @param {(id: string, newCwd: string) => void} callback
+   */
+  setOnCwdChanged(callback) {
+    this.onCwdChanged = callback;
+  }
+
+  /**
+   * Throttled working directory check
+   * @param {string} id
+   */
+  scheduleCwdCheck(id) {
+    if (this._cwdCheckTimers.has(id)) return;
+    const timer = setTimeout(() => {
+      this._cwdCheckTimers.delete(id);
+      this.getCwd(id);
+    }, 400);
+    this._cwdCheckTimers.set(id, timer);
+  }
+
+  /**
+   * Dynamically query the live working directory of a PTY shell process
+   * @param {string} id
+   * @returns {string}
+   */
+  getCwd(id) {
+    const session = this.sessions.get(id);
+    if (!session) return '';
+    const pid = session.pty?.pid;
+    if (pid && process.platform === 'darwin') {
+      try {
+        const { execSync } = require('child_process');
+        const out = execSync(`lsof -a -p ${pid} -d cwd -Fn 2>/dev/null`, { timeout: 800 }).toString();
+        const line = out.split('\n').find((l) => l.startsWith('n'));
+        if (line) {
+          const actualPath = line.substring(1).trim();
+          if (actualPath && fs.existsSync(actualPath)) {
+            if (session.cwd !== actualPath) {
+              const oldCwd = session.cwd;
+              session.cwd = actualPath;
+              console.log(`[PTYManager] Session ${id} cwd dynamically updated: ${oldCwd} -> ${actualPath}`);
+              if (typeof this.onCwdChanged === 'function') {
+                this.onCwdChanged(id, actualPath);
+              }
+            }
+            return actualPath;
+          }
+        }
+      } catch (_) {}
+    } else if (pid && process.platform === 'linux') {
+      try {
+        const actual = fs.readlinkSync(`/proc/${pid}/cwd`);
+        if (actual && fs.existsSync(actual)) {
+          if (session.cwd !== actual) {
+            const oldCwd = session.cwd;
+            session.cwd = actual;
+            console.log(`[PTYManager] Session ${id} cwd dynamically updated: ${oldCwd} -> ${actual}`);
+            if (typeof this.onCwdChanged === 'function') {
+              this.onCwdChanged(id, actual);
+            }
+          }
+          return actual;
+        }
+      } catch (_) {}
+    }
+    return session.cwd || '';
   }
 
   /**
@@ -171,6 +242,7 @@ class PTYManager {
           if (typeof onData === 'function') {
             onData(id, data);
           }
+          this.scheduleCwdCheck(id);
         });
 
         ptyProcess.onExit(({ exitCode, signal }) => {
@@ -227,7 +299,7 @@ class PTYManager {
         targetShell = this.getDefaultShell();
       }
       const safeArgs = Array.isArray(shellArgs) && shellArgs.length > 0 ? shellArgs : (isWin ? [] : (targetShell.endsWith('zsh') ? ['-o', 'NO_PROMPT_SP', '-l'] : ['-l']));
-      const safeCwd = typeof cwd === 'string' && cwd.length > 0 ? cwd : this.resolveCwd();
+      const safeCwd = typeof cwd === 'string' && cwd.length > 0 && cwd !== '~' && fs.existsSync(cwd) ? cwd : this.resolveCwd();
 
       const child = cpSpawn(
         targetShell,
@@ -439,22 +511,24 @@ class PTYManager {
   cdSession(id, targetDir) {
     const session = this.sessions.get(id);
     if (!session || !targetDir) return false;
-    const resolved = resolveExistingPath(targetDir);
+    const resolved = (targetDir === '~' || !targetDir) ? os.homedir() : resolveExistingPath(targetDir);
     if (!fs.existsSync(resolved)) return false;
+    if (session.cwd === resolved) return true;
     session.cwd = resolved;
     try {
-      const localBin = path.join(resolved, 'node_modules', '.bin');
-      const localNodeModules = path.join(resolved, 'node_modules');
+      this.buffers.set(id, '');
       if (process.platform === 'win32') {
+        const localBin = path.join(resolved, 'node_modules', '.bin');
+        const localNodeModules = path.join(resolved, 'node_modules');
         if (/powershell|pwsh/i.test(session.shell)) {
-          session.pty.write(`Set-Location -LiteralPath "${resolved}"; $env:PATH = "${localBin};" + $env:PATH; $env:NODE_PATH = "${localNodeModules};" + $env:NODE_PATH\r`);
+          session.pty.write(`Set-Location -LiteralPath "${resolved}"; Clear-Host\r`);
         } else {
-          session.pty.write(`cd /d "${resolved}" & set "PATH=${localBin};%PATH%" & set "NODE_PATH=${localNodeModules};%NODE_PATH%"\r`);
+          session.pty.write(`cd /d "${resolved}" & cls\r`);
         }
       } else {
-        session.pty.write(`cd "${resolved}" && export PATH="${localBin}:$PATH" && export NODE_PATH="${localNodeModules}:$NODE_PATH"\n`);
+        session.pty.write(`cd "${resolved}" && clear\r`);
       }
-      console.log(`[PTYManager] Directed session ${id} to ${resolved} with scoped node_modules in PATH`);
+      console.log(`[PTYManager] Directed session ${id} to ${resolved} (screen cleared)`);
       return true;
     } catch (err) {
       console.warn(`[PTYManager] Failed to cd session ${id}:`, err);
@@ -470,7 +544,8 @@ class PTYManager {
     if (!targetDir) return;
     const resolved = resolveExistingPath(targetDir);
     if (!fs.existsSync(resolved)) return;
-    for (const [id] of this.sessions.entries()) {
+    for (const [id, session] of this.sessions.entries()) {
+      if (session && session.cwd === resolved) continue;
       this.cdSession(id, resolved);
     }
   }

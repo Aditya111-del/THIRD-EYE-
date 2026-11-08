@@ -26,38 +26,43 @@ export function SettingsModal({
 }: SettingsModalProps) {
   const [activeTab, setActiveTab] = useState<'ai' | 'editor' | 'profile'>(defaultTab);
 
+  const getStorageItem = (key: string, fallback = ''): string => {
+    if (typeof window !== 'undefined') {
+      try {
+        return localStorage.getItem(key) ?? fallback;
+      } catch {
+        return fallback;
+      }
+    }
+    return fallback;
+  };
+
   // AI Form state
-  const [geminiKey, setGeminiKey] = useState(() => {
-    return localStorage.getItem('thirdeye_gemini_key') || '';
-  });
-  const [geminiModel, setGeminiModel] = useState(() => {
-    return localStorage.getItem('thirdeye_gemini_model') || 'gemini-2.0-flash';
-  });
+  const [geminiKey, setGeminiKey] = useState(() => getStorageItem('thirdeye_gemini_key', ''));
+  const [geminiModel, setGeminiModel] = useState(() =>
+    getStorageItem('thirdeye_gemini_model', 'gemini-2.0-flash')
+  );
 
   // Editor settings state
-  const [fontSize, setFontSize] = useState(() => {
-    return localStorage.getItem('thirdeye_editor_font_size') || '14';
-  });
-  const [tabSize, setTabSize] = useState(() => {
-    return localStorage.getItem('thirdeye_editor_tab_size') || '2';
-  });
-  const [wordWrap, setWordWrap] = useState(() => {
-    return localStorage.getItem('thirdeye_editor_word_wrap') === 'on';
-  });
-  const [minimap, setMinimap] = useState(() => {
-    return localStorage.getItem('thirdeye_editor_minimap') !== 'off';
-  });
+  const [fontSize, setFontSize] = useState(() => getStorageItem('thirdeye_editor_font_size', '14'));
+  const [tabSize, setTabSize] = useState(() => getStorageItem('thirdeye_editor_tab_size', '2'));
+  const [wordWrap, setWordWrap] = useState(
+    () => getStorageItem('thirdeye_editor_word_wrap', 'off') === 'on'
+  );
+  const [minimap, setMinimap] = useState(
+    () => getStorageItem('thirdeye_editor_minimap', 'on') !== 'off'
+  );
 
   // Profile settings state
-  const [engineerName, setEngineerName] = useState(() => {
-    return localStorage.getItem('thirdeye_profile_name') || 'Aditya Salgotra';
-  });
-  const [engineerEmail, setEngineerEmail] = useState(() => {
-    return localStorage.getItem('thirdeye_profile_email') || 'aditya.s.ctr@greyorange.com';
-  });
-  const [employeeId, setEmployeeId] = useState(() => {
-    return localStorage.getItem('thirdeye_profile_emp_id') || 'GO-84920';
-  });
+  const [engineerName, setEngineerName] = useState(() =>
+    getStorageItem('thirdeye_profile_name', 'Aditya Salgotra')
+  );
+  const [engineerEmail, setEngineerEmail] = useState(() =>
+    getStorageItem('thirdeye_profile_email', 'aditya.s.ctr@greyorange.com')
+  );
+  const [employeeId, setEmployeeId] = useState(() =>
+    getStorageItem('thirdeye_profile_emp_id', 'GO-84920')
+  );
 
   // Save feedback state
   const [saveSuccess, setSaveSuccess] = useState(false);

@@ -16,10 +16,15 @@ import { AgentSpec, TaskGraphDAG, TaskGraphStep } from '@third-eye/shared';
 import { compactConversationHistory, ConversationTurn } from './compaction';
 import { getActiveRunningTasksSummary } from '../tools/runTerminal';
 import { SkillManager, SkillDefinition } from '../skills/skillManager';
+import { isVisionCapableModel } from '../core/loop';
 
 export interface EnvelopeInputContext {
   workspaceRoot: string;
   sessionId: string;
+  model?: string;
+  cwd?: string;
+  cwdTree?: string;
+  directoryTree?: string;
   taskGraph?: TaskGraphDAG;
   currentStep?: TaskGraphStep;
   openTabs?: Array<{ path: string; selection?: string; isDirty?: boolean }>;
@@ -32,12 +37,50 @@ export interface EnvelopeInputContext {
   userMessage?: string;
   skillManager?: SkillManager;
   matchedSkills?: SkillDefinition[];
+  images?: any[];
 }
 
 export interface BuiltEnvelope {
   systemPrompt: string;
   messages: ConversationTurn[];
   tokenEstimate: number;
+}
+
+function scanDirectoryTreeSync(targetDir: string, maxDepth = 4, maxEntries = 250): string {
+  if (!targetDir || !fs.existsSync(targetDir)) return '';
+  const dirName = path.basename(targetDir) || targetDir;
+  const entries: string[] = [`${dirName}/`];
+  const ignoreDirs = new Set(['.git', 'node_modules', '.output', 'dist', 'build', '.cache', '.next', '.vite']);
+
+  const walk = (cur: string, depth: number, prefix: string) => {
+    if (depth > maxDepth || entries.length >= maxEntries) return;
+    try {
+      const items = fs.readdirSync(cur, { withFileTypes: true });
+      const filtered = items.filter((d) => !ignoreDirs.has(d.name) && !d.name.startsWith('.git'));
+      filtered.sort((a, b) => {
+        if (a.isDirectory() && !b.isDirectory()) return -1;
+        if (!a.isDirectory() && b.isDirectory()) return 1;
+        return a.name.localeCompare(b.name);
+      });
+      for (let i = 0; i < filtered.length; i++) {
+        if (entries.length >= maxEntries) break;
+        const item = filtered[i];
+        const isLast = i === filtered.length - 1;
+        const connector = isLast ? '└── ' : '├── ';
+        const childPrefix = prefix + (isLast ? '    ' : '│   ');
+        const full = path.join(cur, item.name);
+        if (item.isDirectory()) {
+          entries.push(`${prefix}${connector}${item.name}/`);
+          walk(full, depth + 1, childPrefix);
+        } else {
+          entries.push(`${prefix}${connector}${item.name}`);
+        }
+      }
+    } catch {}
+  };
+
+  walk(targetDir, 1, '');
+  return entries.join('\n');
 }
 
 function estimateTokens(text: string): number {
@@ -54,9 +97,16 @@ function truncateToTokens(text: string, maxTokens: number): string {
 
 export function loadRolePrompt(role: string): string {
   try {
-    const promptPath = path.join(__dirname, '..', 'prompts', `${role}.md`);
-    if (fs.existsSync(promptPath)) {
-      return fs.readFileSync(promptPath, 'utf-8');
+    const candidates = [
+      path.join(__dirname, '..', 'prompts', `${role}.md`),
+      path.join(__dirname, '..', '..', 'src', 'prompts', `${role}.md`),
+      path.join(process.cwd(), 'src', 'prompts', `${role}.md`),
+      path.join(process.cwd(), 'backend', 'ai-service', 'src', 'prompts', `${role}.md`),
+    ];
+    for (const p of candidates) {
+      if (fs.existsSync(p)) {
+        return fs.readFileSync(p, 'utf-8');
+      }
     }
   } catch {}
   return `You are an expert ${role} agent for the THIRD_EYE IDE.`;
@@ -178,11 +228,60 @@ ${(agentSpec.acceptanceCriteria || []).map((c) => `- ${c}`).join('\n') || '- Sat
     historyTurns = compactConversationHistory(historyTurns, 8);
   }
 
+  // Attach images to user turn if provided and model supports vision
+  const visionSupported = isVisionCapableModel(context.model);
+  if (!visionSupported) {
+    historyTurns = historyTurns.map((turn) => {
+      if (turn.images && turn.images.length > 0) {
+        const { images, ...rest } = turn;
+        return rest;
+      }
+      return turn;
+    });
+  } else if (context.images && context.images.length > 0) {
+    const lastUserIdx = historyTurns.map((t) => t.role).lastIndexOf('user');
+    if (lastUserIdx !== -1) {
+      historyTurns[lastUserIdx] = {
+        ...historyTurns[lastUserIdx],
+        images: context.images,
+      };
+    } else if (context.userMessage) {
+      historyTurns.push({
+        role: 'user',
+        content: context.userMessage,
+        images: context.images,
+      });
+    }
+  }
+
+  // 7. Live Project Directory Tree & Manifest
+  let dirTree = context.cwdTree || context.directoryTree || '';
+  const wsRoot = context.workspaceRoot || context.cwd || '';
+  if (!dirTree && wsRoot && fs.existsSync(wsRoot)) {
+    try {
+      dirTree = scanDirectoryTreeSync(wsRoot, 4, 250);
+    } catch (_) {}
+  }
+
+  let packageInfoText = '';
+  if (wsRoot && fs.existsSync(path.join(wsRoot, 'package.json'))) {
+    try {
+      const pkg = JSON.parse(fs.readFileSync(path.join(wsRoot, 'package.json'), 'utf-8'));
+      packageInfoText = `Project: ${pkg.name || path.basename(wsRoot)} (v${pkg.version || '1.0.0'})\n` +
+        (pkg.description ? `Description: ${pkg.description}\n` : '') +
+        (pkg.scripts ? `Scripts: ${Object.keys(pkg.scripts).join(', ')}\n` : '') + '\n';
+    } catch (_) {}
+  }
+
+  const dirTreeSection = dirTree
+    ? `## LIVE PROJECT DIRECTORY TREE & FILES:\n${packageInfoText}${dirTree}\n\n`
+    : '';
+
   // Assemble the messages list
   const messages: ConversationTurn[] = [
     {
       role: 'system',
-      content: `${systemPrompt}\n\n${taskBlock}\n\n${combinedRepoChunks}\n\n${openTabsText}\n\n${terminalBlock}`,
+      content: `${systemPrompt}\n\n${taskBlock}\n\n${dirTreeSection}${combinedRepoChunks}\n\n${openTabsText}\n\n${terminalBlock}`,
     },
     ...historyTurns,
   ];

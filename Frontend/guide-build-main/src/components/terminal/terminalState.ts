@@ -17,6 +17,14 @@ export function getActiveXtermInstance(): any {
   return activeXtermInstance;
 }
 
+export function clearActiveTerminal(): void {
+  if (activeXtermInstance && typeof activeXtermInstance.clear === "function") {
+    try {
+      activeXtermInstance.clear();
+    } catch {}
+  }
+}
+
 export function getActiveTerminalSelection(): string {
   if (
     activeXtermInstance &&

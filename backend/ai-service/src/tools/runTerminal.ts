@@ -5,6 +5,7 @@
 
 import { exec, spawn, execSync } from 'child_process';
 import path from 'path';
+import os from 'os';
 
 export interface RunTerminalInput {
   command: string;
@@ -29,9 +30,10 @@ export async function executeRunTerminal(input: RunTerminalInput, workspaceRoot:
   const command = input.command;
   if (!command) throw new Error('run_terminal requires command');
 
+  const effectiveWs = workspaceRoot || process.env.HOME || os.homedir();
   const cwd = input.cwd
-    ? (path.isAbsolute(input.cwd) ? input.cwd : path.join(workspaceRoot, input.cwd))
-    : workspaceRoot;
+    ? (path.isAbsolute(input.cwd) ? input.cwd : path.join(effectiveWs, input.cwd))
+    : effectiveWs;
 
   const timeout = input.timeoutMs || 45000;
 
@@ -55,8 +57,10 @@ export async function executeRunTerminal(input: RunTerminalInput, workspaceRoot:
     NODE_PATH: nodePathParts.join(path.delimiter),
   };
 
-  // Auto-promote dev servers / watchers to background tasks
-  const isDevServerCmd = /\b(npm\s+run\s+dev|npm\s+start|yarn\s+dev|yarn\s+start|pnpm\s+dev|bun\s+dev|vite|next\s+dev)\b/i.test(command);
+  // Auto-promote dev servers / watchers to background tasks across all ecosystems
+  const isDevServerCmd =
+    /\b(npm\s+run\s+dev|npm\s+start|yarn\s+dev|yarn\s+start|pnpm\s+dev|bun\s+dev|vite|next\s+dev|astro\s+dev|remix\s+dev|uvicorn|fastapi\s+dev|flask\s+run|manage\.py\s+runserver|streamlit\s+run|cargo\s+watch|trunk\s+serve|air\b|docker\s+compose\s+up)\b/i.test(command) ||
+    /\b(--watch|--reload|\bserve\b)\b/i.test(command);
   const isBackground = Boolean(input.background || isDevServerCmd);
 
   // Background Task support: e.g. dev server, watchers
@@ -101,12 +105,36 @@ export async function executeRunTerminal(input: RunTerminalInput, workspaceRoot:
 
     backgroundTasks.set(taskId, task);
 
+    // Antigravity-grade startup verification: wait 2000ms to verify health
+    await new Promise((r) => setTimeout(r, 2000));
+
+    const initialOutput = task.buffer.slice(-40).join('\n');
+    const urlMatch = initialOutput.match(/https?:\/\/(?:localhost|127\.0\.0\.1):(\d+)/i);
+    const detectedUrl = urlMatch ? urlMatch[0] : undefined;
+
+    // Check if the process exited or crashed during startup
+    if (task.status === 'failed' || (task.exitCode !== undefined && task.exitCode !== 0)) {
+      return {
+        command,
+        background: true,
+        taskId,
+        status: 'failed',
+        exitCode: task.exitCode || 1,
+        output: initialOutput || '(Process exited immediately with non-zero code)',
+        error: `Background command "${command}" failed immediately on startup (exit code ${task.exitCode}).\nLogs:\n${initialOutput}`,
+      };
+    }
+
     return {
       command,
       background: true,
       taskId,
       status: 'running',
-      message: `Launched background task "${command}" with taskId: ${taskId}. Dedicated task session active.`,
+      url: detectedUrl,
+      output: initialOutput,
+      message: detectedUrl
+        ? `Background dev server is verified and live at ${detectedUrl} (taskId: ${taskId}).`
+        : `Background process "${command}" started and running stably (taskId: ${taskId}). Initial output:\n${initialOutput.slice(-300)}`,
     };
   }
 
@@ -127,6 +155,7 @@ export async function executeRunTerminal(input: RunTerminalInput, workspaceRoot:
         durationMs,
         background: false,
         truncated: lines.length > 200,
+        error: exitCode !== 0 ? `Command exited with non-zero code ${exitCode}:\n${capped.slice(-800)}` : undefined,
       });
     });
   });

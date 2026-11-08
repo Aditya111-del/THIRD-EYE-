@@ -138,7 +138,8 @@ export function MainLayout() {
   useEffect(() => {
     const updateGit = () => {
       if (window.electronAPI?.git?.status) {
-        window.electronAPI.git.status().then((res: any) => {
+        const targetCwd = editorApi?.workspaceRoot || (typeof window !== "undefined" && (window as any).__THIRD_EYE_WORKSPACE_ROOT__) || "";
+        window.electronAPI.git.status({ cwd: targetCwd }).then((res: any) => {
           if (res?.success && res.isRepo !== false) {
             setGitStatus({
               isRepo: true,
@@ -203,7 +204,18 @@ export function MainLayout() {
   useEffect(() => {
     if (!terminalSpawnedRef.current && terminalApi.sessions.length === 0) {
       terminalSpawnedRef.current = true;
-      terminalApi.createTerminal('cmd');
+      if (window.electronAPI?.fs?.getWorkspaceRoot) {
+        window.electronAPI.fs.getWorkspaceRoot().then((root: string) => {
+          if (root && typeof window !== "undefined") {
+            (window as any).__THIRD_EYE_WORKSPACE_ROOT__ = root;
+          }
+          terminalApi.createTerminal('cmd');
+        }).catch(() => {
+          terminalApi.createTerminal('cmd');
+        });
+      } else {
+        terminalApi.createTerminal('cmd');
+      }
     }
   }, []);
 
@@ -212,7 +224,6 @@ export function MainLayout() {
     if (window.electronAPI?.dialog?.openFolder) {
       const res = await window.electronAPI.dialog.openFolder();
       if (res?.success && res.folderPath) {
-        terminalApi.cdToDirectory(res.folderPath);
         if (editorApi?.setWorkspaceRoot) {
           editorApi.setWorkspaceRoot(res.folderPath);
         }
@@ -221,7 +232,7 @@ export function MainLayout() {
         }
       }
     }
-  }, [editorApi, terminalApi]);
+  }, [editorApi]);
 
   // Global Keyboard Shortcuts (Ctrl+K, Ctrl+B, Ctrl+Shift+A, Ctrl+J, Ctrl+O, Zoom)
   useEffect(() => {

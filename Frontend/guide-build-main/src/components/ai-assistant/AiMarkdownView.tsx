@@ -1,4 +1,5 @@
 import React, { useMemo } from "react";
+import { motion } from "framer-motion";
 import { Copy, Check, Code2, Play, FileCode } from "lucide-react";
 import { copyToClipboard } from "@/lib/clipboard";
 
@@ -365,7 +366,12 @@ function MarkdownCodeBlock({
   const cleanLang = (lang || "code").toLowerCase();
 
   return (
-    <div className="my-2.5 overflow-hidden rounded-[8px] border border-[#272832] bg-[#0E0F13] font-mono text-[12px] shadow-lg select-text group">
+    <motion.div
+      initial={{ opacity: 0, y: 4 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+      className="my-2.5 overflow-hidden rounded-[8px] border border-[#272832] bg-[#0E0F13] font-mono text-[12px] shadow-lg select-text group"
+    >
       {/* Top action header */}
       <div className="flex h-[30px] items-center justify-between border-b border-[#1E1F28] bg-[#14151B] px-3 text-[11px] text-[#858596] select-none">
         <div className="flex items-center gap-1.5">
@@ -440,6 +446,6 @@ function MarkdownCodeBlock({
       <div className="overflow-x-auto p-3 text-[#E2E2EC] leading-[1.6] scrollbar-thin bg-[#0A0B0E]">
         <pre className="font-mono text-[11.5px] whitespace-pre">{code}</pre>
       </div>
-    </div>
+    </motion.div>
   );
 }

@@ -66,7 +66,9 @@ export class SessionRegistry {
       targetShell = this.getDefaultShell();
     }
 
-    const targetCwd = options.cwd || os.homedir() || process.cwd();
+    const targetCwd = (options.cwd && options.cwd !== '~' && fs.existsSync(options.cwd))
+      ? options.cwd
+      : (os.homedir() || process.cwd());
     const cols = Math.max(10, options.cols || 80);
     const rows = Math.max(5, options.rows || 24);
 

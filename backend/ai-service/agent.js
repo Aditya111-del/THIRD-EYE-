@@ -2,6 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
+const os = require('os');
 const OpenAI = require('openai');
 
 require('dotenv').config({ path: path.join(__dirname, '../../.env') });
@@ -66,10 +67,22 @@ let openaiClient = null;
 function getOpenAIClient() {
   reloadEnvIfNeeded();
   const apiKey = process.env.OPENAI_API_KEY;
-  const baseURL = process.env.OPENAI_BASE_URL;
+  let baseURL = process.env.OPENAI_BASE_URL;
+  if (apiKey && apiKey.startsWith('sk-or-') && (!baseURL || baseURL.includes('localhost') || baseURL.includes('127.0.0.1'))) {
+    baseURL = 'https://openrouter.ai/api/v1';
+  }
   if ((apiKey && apiKey !== 'your_openai_api_key_here') || baseURL) {
     if (!openaiClient || openaiClient.apiKey !== apiKey || openaiClient.baseURL !== baseURL) {
-      openaiClient = new OpenAI({ apiKey: apiKey || 'dummy-key', baseURL: baseURL || undefined });
+      openaiClient = new OpenAI({
+        apiKey: apiKey || 'dummy-key',
+        baseURL: baseURL || undefined,
+        defaultHeaders: {
+          'ngrok-skip-browser-warning': 'true',
+          'User-Agent': 'third-eye-ai-service',
+          'HTTP-Referer': 'https://thirdeye.dev',
+          'X-Title': 'THIRD EYE IDE',
+        },
+      });
     }
     return openaiClient;
   }
@@ -138,7 +151,7 @@ function inferProjectRoot({ cwd, workspaceRoot, activeFile, openTabs, activeDir 
     if (fs.existsSync(resolved)) return resolved;
   }
 
-  return resolveExistingPath(process.cwd());
+  return resolveExistingPath(os.homedir() || process.cwd());
 }
 
 /**
@@ -148,19 +161,18 @@ async function callGemini({ apiKey: overrideKey, systemPrompt, prompt, contents,
   const apiKey = overrideKey || getGeminiApiKey();
   if (!apiKey) throw new Error('GEMINI_API_KEY missing');
 
-  const preferredModel = (process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite-preview').trim();
+  const preferredModel = (process.env.GEMINI_MODEL || 'gemini-3.5-flash-lite').trim();
   const models = [
     preferredModel,
-    'gemini-3.1-flash-lite-preview',
-    'gemini-3-flash-preview',
-    'gemini-3.5-flash',
-    'gemini-3.8-flash',
-    'gemini-3.7-flash',
-    'gemini-3.6-flash',
     'gemini-3.5-flash-lite',
-    'gemini-flash-lite-latest',
-    'gemini-flash-latest',
     'gemini-3.1-flash-lite',
+    'gemini-flash-lite-latest',
+    'gemini-3-flash-preview',
+    'gemma-4-26b-a4b-it',
+    'gemma-4-31b-it',
+    'gemini-3.8-flash',
+    'gemini-3.6-flash',
+    'gemini-3.5-flash',
   ].filter((m, i, arr) => m && arr.indexOf(m) === i && !m.includes('2.5') && !m.includes('2.0') && !m.includes('1.5'));
 
   const safeContents = (Array.isArray(contents) && contents.length > 0)
@@ -444,7 +456,7 @@ function generateSmartTerminalReply({
     : 'local-machine';
   const user = activeSess?.user || (activeUser !== 'user' ? activeUser : 'user');
   const effectiveCwd = inferProjectRoot({ cwd, workspaceRoot, activeFile, openTabs, activeDir });
-  const dir = effectiveCwd || (isRemote ? '~' : resolveExistingPath(process.cwd()));
+  const dir = effectiveCwd || (isRemote ? '~' : resolveExistingPath(os.homedir() || process.cwd()));
   const projectName = path.basename(effectiveCwd) || 'Workspace';
 
   const allText = cleanLines.join('\n');
@@ -1909,8 +1921,10 @@ Context Awareness:
 - Always reference relative project file paths accurately.
 - Formatting Hygiene: Use bold section headings (e.g. **Section Title:**) and clean bullet points.
 ${sessionsOverview}`;
+  const activeProviderSetting = (process.env.AI_PROVIDER || '').toLowerCase();
+  const preferOpenAi = activeProviderSetting === 'openai' || Boolean(openAiClient && !geminiKey);
 
-  if (geminiKey) {
+  if (!preferOpenAi && geminiKey) {
     try {
       const formattedContents = [];
       for (const msg of messages) {
@@ -1979,7 +1993,7 @@ ${sessionsOverview}`;
 
   if (openAiClient) {
     try {
-      const model = process.env.OPENAI_MODEL || 'gpt-4o';
+      const model = process.env.OPENAI_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free';
       const cleanedMessages = messages.map((m) => {
         let content = m.content || m.text || '';
         if (m.role === 'user') {
@@ -2026,13 +2040,170 @@ app.get('/api/ai/status', (req, res) => {
   reloadEnvIfNeeded();
   const geminiKey = getGeminiApiKey();
   const openAiClient = getOpenAIClient();
+  const provider = (process.env.AI_PROVIDER || '').toLowerCase();
   return res.json({
     success: true,
     hasGeminiKey: Boolean(geminiKey),
     hasOpenAiKey: Boolean(openAiClient),
-    activeProvider: geminiKey ? 'gemini' : openAiClient ? 'openai' : 'none',
-    models: ['gemini-3.1-flash-lite-preview', 'gemini-3-flash-preview', 'gemini-3.5-flash', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite'],
+    activeProvider: provider === 'openai' ? 'openai' : (geminiKey ? 'gemini' : openAiClient ? 'openai' : 'none'),
+    models: ['nvidia/nemotron-3-ultra-550b-a55b:free', 'gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gpt-4o', 'deepseek-r1'],
   });
+});
+
+app.get('/api/ai/config', async (req, res) => {
+  reloadEnvIfNeeded();
+  const geminiKey = process.env.GEMINI_API_KEY || '';
+  const openAiKey = process.env.OPENAI_API_KEY || '';
+  const openAiBaseUrl = process.env.OPENAI_BASE_URL || '';
+  const aiProvider = (process.env.AI_PROVIDER || (geminiKey ? 'gemini' : openAiKey || openAiBaseUrl ? 'openai' : 'gemini')).toLowerCase();
+  const model = process.env.OPENAI_MODEL || process.env.GEMINI_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free';
+
+  const mask = (k) => (!k ? '' : k.length > 8 ? `${k.slice(0, 4)}...${k.slice(-4)}` : '••••••••');
+
+  return res.json({
+    success: true,
+    provider: aiProvider,
+    model,
+    openAiModel: process.env.OPENAI_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free',
+    geminiKeyMasked: mask(geminiKey),
+    hasGeminiKey: Boolean(geminiKey && !geminiKey.includes('your_')),
+    openAiKeyMasked: mask(openAiKey),
+    hasOpenAiKey: Boolean(openAiKey && !openAiKey.includes('your_')),
+    openAiBaseUrl: openAiBaseUrl || (openAiKey.startsWith('sk-or-') ? 'https://openrouter.ai/api/v1' : 'https://api.openai.com/v1'),
+  });
+});
+
+app.post('/api/ai/config', async (req, res) => {
+  const { provider, model, geminiKey, openAiKey, openAiBaseUrl } = req.body || {};
+  try {
+    const envPath = path.join(__dirname, '../../.env');
+    let envContent = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
+
+    const updateEnvVar = (varName, val) => {
+      if (val === undefined || val === null) return;
+      const cleanVal = String(val).trim();
+      const regex = new RegExp(`^${varName}=.*$`, 'm');
+      if (regex.test(envContent)) {
+        envContent = envContent.replace(regex, `${varName}=${cleanVal}`);
+      } else {
+        envContent += `\n${varName}=${cleanVal}`;
+      }
+      process.env[varName] = cleanVal;
+    };
+
+    if (provider) updateEnvVar('AI_PROVIDER', provider);
+    if (geminiKey !== undefined && geminiKey.trim()) updateEnvVar('GEMINI_API_KEY', geminiKey.trim());
+    if (openAiKey !== undefined && openAiKey.trim()) updateEnvVar('OPENAI_API_KEY', openAiKey.trim());
+    if (openAiBaseUrl !== undefined) updateEnvVar('OPENAI_BASE_URL', openAiBaseUrl.trim());
+    if (model) {
+      if (provider === 'gemini' || model.toLowerCase().includes('gemini')) {
+        updateEnvVar('GEMINI_MODEL', model);
+      } else {
+        updateEnvVar('OPENAI_MODEL', model);
+      }
+    }
+
+    fs.writeFileSync(envPath, envContent.trim() + '\n', 'utf8');
+    reloadEnvIfNeeded();
+
+    return res.json({ success: true, message: 'AI Configuration successfully saved & active' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/ai/models/local', async (req, res) => {
+  const ollamaUrl = req.query.ollamaUrl || process.env.OPENAI_BASE_URL?.replace(/\/v1\/?$/, '') || 'http://localhost:11434';
+  const lmStudioUrl = req.query.lmStudioUrl || 'http://localhost:1234/v1';
+
+  const discovered = [];
+  let ollamaStatus = false;
+  let lmStudioStatus = false;
+
+  // 1. Query Ollama tags
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2200);
+    const oRes = await fetch(`${ollamaUrl}/api/tags`, { signal: controller.signal });
+    clearTimeout(timeout);
+    if (oRes.ok) {
+      const data = await oRes.json();
+      ollamaStatus = true;
+      if (Array.isArray(data.models)) {
+        for (const m of data.models) {
+          discovered.push({
+            name: m.name,
+            provider: 'ollama',
+            size: m.size ? `${(m.size / (1024 * 1024 * 1024)).toFixed(1)} GB` : undefined,
+            family: m.details?.family || 'llama',
+            endpoint: ollamaUrl,
+          });
+        }
+      }
+    }
+  } catch (_) {}
+
+  // 2. Query LM Studio / local OpenAI-compatible
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 2200);
+    const lmRes = await fetch(`${lmStudioUrl}/models`, { credentials: 'omit', signal: controller.signal });
+    clearTimeout(timeout);
+    if (lmRes.ok) {
+      const data = await lmRes.json();
+      lmStudioStatus = true;
+      if (Array.isArray(data.data)) {
+        for (const m of data.data) {
+          discovered.push({
+            name: m.id,
+            provider: 'lmstudio',
+            family: 'local',
+            endpoint: lmStudioUrl,
+          });
+        }
+      }
+    }
+  } catch (_) {}
+
+  return res.json({
+    success: true,
+    ollamaOnline: ollamaStatus,
+    lmStudioOnline: lmStudioStatus,
+    count: discovered.length,
+    models: discovered,
+  });
+});
+
+app.post('/api/ai/test-connection', async (req, res) => {
+  const { provider = 'gemini', apiKey, model, baseUrl } = req.body || {};
+  const start = Date.now();
+  try {
+    if (provider === 'gemini') {
+      const key = apiKey || process.env.GEMINI_API_KEY;
+      if (!key) return res.status(400).json({ success: false, error: 'No Gemini API Key provided' });
+      const testModel = model || 'gemini-3.5-flash-lite';
+      const cleanModel = testModel.replace(/^models\//, '');
+      const resp = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${cleanModel}?key=${key}`);
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.error?.message || `HTTP ${resp.status}`);
+      }
+      return res.json({ success: true, latencyMs: Date.now() - start, model: data.name || cleanModel });
+    } else {
+      const url = baseUrl ? (baseUrl.endsWith('/models') ? baseUrl : `${baseUrl.replace(/\/+$/, '')}/models`) : 'https://api.openai.com/v1/models';
+      const key = apiKey || process.env.OPENAI_API_KEY || 'ollama';
+      const resp = await fetch(url, {
+        headers: { Authorization: `Bearer ${key}` },
+      });
+      const data = await resp.json();
+      if (!resp.ok) {
+        throw new Error(data.error?.message || `HTTP ${resp.status}`);
+      }
+      return res.json({ success: true, latencyMs: Date.now() - start });
+    }
+  } catch (err) {
+    return res.json({ success: false, latencyMs: Date.now() - start, error: err.message });
+  }
 });
 
 app.post('/api/ai/save-key', async (req, res) => {
@@ -2165,7 +2336,9 @@ app.post('/api/ai/agent/stream', async (req, res) => {
   const {
     messages = [],
     sessionId = `session-${Date.now()}`,
-    workspaceRoot = defaultWorkspace,
+    workspaceRoot: rawWsRoot,
+    cwd,
+    cwdTree: rawCwdTree,
     openTabs = [],
     terminalTail = '',
     model,
@@ -2174,9 +2347,47 @@ app.post('/api/ai/agent/stream', async (req, res) => {
     activeFile = null,
   } = req.body || {};
 
+  const effectiveWorkspace = inferProjectRoot({
+    cwd,
+    workspaceRoot: rawWsRoot,
+    activeFile,
+    openTabs,
+    activeDir: '',
+  });
+
+  const finalWorkspaceRoot = effectiveWorkspace || rawWsRoot || defaultWorkspace;
+
+  let effectiveCwdTree = rawCwdTree || '';
+  if ((!effectiveCwdTree || effectiveCwdTree.length < 5) && finalWorkspaceRoot && fs.existsSync(finalWorkspaceRoot)) {
+    try {
+      const scanned = scanDirectoryTreeSync(finalWorkspaceRoot, 4, 300);
+      effectiveCwdTree = scanned.treeString;
+    } catch (_) {}
+  }
+
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
   res.setHeader('Connection', 'keep-alive');
+
+  const heartbeat = setInterval(() => {
+    try {
+      res.write(': keepalive\n\n');
+    } catch (_) {}
+  }, 5000);
+
+  req.on('close', () => {
+    clearInterval(heartbeat);
+  });
+
+  res.on('close', () => {
+    clearInterval(heartbeat);
+    if (!res.writableEnded && req.destroyed && sessionId) {
+      try {
+        agentRouterInstance?.cancel?.(sessionId);
+        agentLoopInstance?.cancel?.(sessionId);
+      } catch (_) {}
+    }
+  });
 
   const sendEvent = (event, data) => {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
@@ -2184,28 +2395,39 @@ app.post('/api/ai/agent/stream', async (req, res) => {
 
   try {
     if (agentRouterInstance) {
-      agentRouterInstance.setWorkspaceRoot(workspaceRoot);
+      if (sessionId) {
+        agentRouterInstance.resetCancellation?.(sessionId);
+      }
+      agentRouterInstance.setWorkspaceRoot(finalWorkspaceRoot);
       const lastMsg = messages[messages.length - 1];
       const userPrompt = lastMsg?.role === 'user' ? lastMsg.content : (req.body.prompt || '');
+      const images = req.body.images || lastMsg?.images || [];
 
       await agentRouterInstance.execute(
         userPrompt,
         {
-          workspaceRoot,
+          workspaceRoot: finalWorkspaceRoot,
+          cwd: cwd || finalWorkspaceRoot,
+          cwdTree: effectiveCwdTree,
+          directoryTree: effectiveCwdTree,
           sessionId,
           openTabs,
           terminalTail,
           activeFile,
           history: messages.slice(0, -1),
           agentMode,
-          model,
-          apiKey: getGeminiApiKey() || undefined,
+          model: model || ((process.env.AI_PROVIDER || '').toLowerCase() === 'openai' ? (process.env.OPENAI_MODEL || 'nvidia/nemotron-3-ultra-550b-a55b:free') : (process.env.GEMINI_MODEL || 'gemini-3.8-flash')),
+          apiKey: req.body.apiKey || ((process.env.AI_PROVIDER || '').toLowerCase() === 'openai' ? (process.env.OPENAI_API_KEY || 'ollama') : (getGeminiApiKey() || process.env.OPENAI_API_KEY || undefined)),
+          baseUrl: req.body.baseUrl || (process.env.OPENAI_API_KEY?.startsWith('sk-or-') ? (process.env.OPENAI_BASE_URL || 'https://openrouter.ai/api/v1') : process.env.OPENAI_BASE_URL) || undefined,
+          provider: req.body.provider || process.env.AI_PROVIDER || undefined,
+          images,
         },
         (event) => {
           sendEvent(event.type, { ...event.data, sessionId: event.sessionId });
         }
       );
 
+      clearInterval(heartbeat);
       res.end();
       return;
     }
@@ -2214,9 +2436,12 @@ app.post('/api/ai/agent/stream', async (req, res) => {
       throw new Error('AgentLoop not initialized. Run tsc build first.');
     }
 
-    agentLoopInstance.setWorkspaceRoot(workspaceRoot);
+    if (sessionId) {
+      agentLoopInstance.resetCancellation?.(sessionId);
+    }
+    agentLoopInstance.setWorkspaceRoot(finalWorkspaceRoot);
     if (context_v2 && repoMapInstance) {
-      repoMapInstance.setWorkspaceRoot(workspaceRoot);
+      repoMapInstance.setWorkspaceRoot(finalWorkspaceRoot);
     }
 
     const lastMsg = messages[messages.length - 1];
@@ -2282,6 +2507,7 @@ ${terminalTail ? `\nRecent Terminal State:\n${terminalTail}\n` : ''}`;
       workspaceRoot,
       sessionId,
       model,
+      images: req.body.images || lastMsg?.images || [],
       envelope: {
         systemPrompt,
         repoMapSummary: repoSummary,
@@ -2312,10 +2538,11 @@ ${terminalTail ? `\nRecent Terminal State:\n${terminalTail}\n` : ''}`;
     });
 
     sendEvent('finish', { reply: result.reply, iterations: result.iterations, sessionId });
-    res.end();
   } catch (err) {
     sendEvent('error', { error: err.message, sessionId });
-    res.end();
+  } finally {
+    clearInterval(heartbeat);
+    try { res.end(); } catch (_) {}
   }
 });
 
@@ -2356,8 +2583,11 @@ app.post('/api/ai/agent/stop', (req, res) => {
   const { sessionId } = req.body || {};
   try {
     if (sessionId) {
-      agentRouterInstance?.['autonomousAgent']?.cancel(sessionId);
+      agentRouterInstance?.cancel?.(sessionId);
+      agentRouterInstance?.getAutonomousAgent?.()?.cancel?.(sessionId);
       agentLoopInstance?.cancel?.(sessionId);
+    } else {
+      agentRouterInstance?.getAutonomousAgent?.()?.getOrchestrator?.()?.cancel?.('');
     }
     res.json({ success: true, message: `Stopped session ${sessionId || 'all'}` });
   } catch (err) {

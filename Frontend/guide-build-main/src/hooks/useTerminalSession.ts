@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect, useRef } from "react";
 import type { Environment, Protocol, Session, TermLine, TerminalInstance } from "@/types/terminal";
-import { clearSessionDataCache } from "@/components/terminal/terminalState";
+import { clearSessionDataCache, clearActiveTerminal } from "@/components/terminal/terminalState";
 import { readFromClipboard } from "@/lib/clipboard";
 
 export const initialEnvs: Environment[] = [
@@ -54,15 +54,15 @@ export function makeSession(
   const defaultShellName = isMac ? "zsh" : (resolvedType === "powershell" ? "Windows PowerShell" : "Command Prompt");
   const shellName = t.name || defaultShellName;
   const shellExe = resolvedType === "powershell" ? "powershell.exe" : (isMac ? "/bin/zsh" : "cmd.exe");
-  const projectDir = workspaceDir || (typeof window !== "undefined" ? (window as any).__THIRD_EYE_WORKSPACE_ROOT__ : "") || "/Users/adityasalgotra/Downloads/THIRD_EYE";
+  const projectDir = workspaceDir || (typeof window !== "undefined" ? (window as any).__THIRD_EYE_WORKSPACE_ROOT__ : "") || "";
 
   return {
     id: sessionId,
     terminalId: t.id,
     title: t.name || shellName,
     protocol,
-    cwd: isLocal ? projectDir : "~",
-    user: isMac ? "adityasalgotra" : "aditya.s.ctr",
+    cwd: isLocal ? (projectDir || "~") : "~",
+    user: isMac ? "user" : "user",
     shellType: resolvedType,
     shell: shellExe,
     lines: isSSH
@@ -70,14 +70,7 @@ export function makeSession(
           { kind: "info", text: `[THIRD EYE SSH] Session initialized for ${t.host}` },
           { kind: "info", text: `Connecting to ${t.host}...` },
         ]
-      : [
-          { kind: "input", text: "rakibulislam@panze-studio ~/universal-agent-skills (main) $ next dev" },
-          { kind: "out", text: "▲ Next.js 15.0.3" },
-          { kind: "out", text: "- Local: http://localhost:3000" },
-          { kind: "out", text: "✓ Ready in 1.2s" },
-          { kind: "out", text: "✓ Compiled /agents in 412ms" },
-          { kind: "input", text: "rakibulislam@panze-studio ~/universal-agent-skills (main) $ " },
-        ],
+      : [],
     currentPrompt: "",
     lastError: undefined,
     ptyId: sessionId,
@@ -105,7 +98,7 @@ export function useTerminalSession() {
   const [envs, setEnvs] = useState(initialEnvs);
   const [sessions, setSessions] = useState<Session[]>([]);
   const [activeId, setActiveId] = useState<string>("");
-  const initialWorkspace = (typeof window !== "undefined" && (window as any).__THIRD_EYE_WORKSPACE_ROOT__) || "/Users/adityasalgotra/Downloads/THIRD_EYE";
+  const initialWorkspace = (typeof window !== "undefined" && (window as any).__THIRD_EYE_WORKSPACE_ROOT__) || "";
   const [workspaceRoot, setWorkspaceRoot] = useState<string>(initialWorkspace);
 
   const active = sessions.find((s) => s.id === activeId) ?? (sessions.length > 0 ? sessions[0] : undefined);
@@ -148,14 +141,50 @@ export function useTerminalSession() {
             prev.map((s) => (s.protocol === "local" ? { ...s, cwd: newRoot } : s))
           );
 
-          // 2. Direct all active terminal processes directly into the new project directory
+          // 2. Clear terminal buffer cache and active screen so old commands do not persist
+          sessionsRef.current.forEach((s) => {
+            clearSessionDataCache(s.id);
+            if (s.ptyId) clearSessionDataCache(s.ptyId);
+          });
+          clearActiveTerminal();
+
+          // 3. Direct all active terminal processes directly into the new project directory
           if (window.electronAPI?.terminal?.cd) {
             window.electronAPI.terminal.cd({ dir: newRoot });
           } else if (window.electronAPI?.terminal?.write) {
             const term = window.electronAPI.terminal;
+            const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
             sessionsRef.current.forEach((s) => {
               if (s.ptyId && s.protocol === "local") {
-                term.write(s.ptyId, `cd "${newRoot}"\r`);
+                term.write(s.ptyId, isMac ? `cd "${newRoot}" && clear\r` : `cd /d "${newRoot}" & cls\r`);
+              }
+            });
+          }
+        } else {
+          // Workspace closed - return to user root home
+          console.log('[useTerminalSession] Workspace closed. Resetting terminal to user root (~).');
+          (window as any).__THIRD_EYE_WORKSPACE_ROOT__ = '';
+          setWorkspaceRoot('');
+          workspaceRootRef.current = '';
+
+          setSessions((prev) =>
+            prev.map((s) => (s.protocol === "local" ? { ...s, cwd: "~" } : s))
+          );
+
+          sessionsRef.current.forEach((s) => {
+            clearSessionDataCache(s.id);
+            if (s.ptyId) clearSessionDataCache(s.ptyId);
+          });
+          clearActiveTerminal();
+
+          if (window.electronAPI?.terminal?.cd) {
+            window.electronAPI.terminal.cd({ dir: "~" });
+          } else if (window.electronAPI?.terminal?.write) {
+            const term = window.electronAPI.terminal;
+            const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
+            sessionsRef.current.forEach((s) => {
+              if (s.ptyId && s.protocol === "local") {
+                term.write(s.ptyId, isMac ? `cd ~ && clear\r` : `cd ~ & cls\r`);
               }
             });
           }
@@ -248,7 +277,11 @@ export function useTerminalSession() {
             if (lastMac[1]) detectedUser = lastMac[1];
             if (lastMac[2]) detectedIp = lastMac[2];
             if (lastMac[3]) {
-              const possibleCwd = lastMac[3].trim();
+              let possibleCwd = lastMac[3].trim();
+              if (possibleCwd.startsWith("~")) {
+                const userHome = (typeof window !== "undefined" && (window as any).__USER_HOME__) || "/Users/adityasalgotra";
+                possibleCwd = possibleCwd === "~" ? userHome : possibleCwd.replace(/^~/, userHome);
+              }
               if (possibleCwd.startsWith("/")) {
                 detectedCwd = possibleCwd;
               } else if (s.cwd && s.cwd.split("/").pop()?.trim() === possibleCwd) {
@@ -352,9 +385,28 @@ export function useTerminalSession() {
       }));
     });
 
+    // Listen to dynamic terminal working directory changes (e.g. user cd in terminal)
+    const unsubscribeCwd = (window.electronAPI as any)?.terminal?.onCwdChanged?.((payload: { id: string; cwd: string }) => {
+      if (!payload?.cwd) return;
+      const cleanCwd = payload.cwd.trim();
+      setSessions((prev) => prev.map((s) => (s.id === payload.id || s.ptyId === payload.id ? { ...s, cwd: cleanCwd } : s)));
+
+      // If active session changed cwd to a valid project folder and it differs from workspaceRoot
+      if (cleanCwd && cleanCwd !== '~' && cleanCwd !== workspaceRootRef.current) {
+        console.log(`[useTerminalSession] Active terminal cwd changed to: ${cleanCwd}. Synchronizing workspace.`);
+        (window as any).__THIRD_EYE_WORKSPACE_ROOT__ = cleanCwd;
+        setWorkspaceRoot(cleanCwd);
+        workspaceRootRef.current = cleanCwd;
+        if (window.electronAPI?.workspace?.openPath) {
+          window.electronAPI.workspace.openPath(cleanCwd).catch(() => {});
+        }
+      }
+    });
+
     return () => {
       unsubscribeData();
       unsubscribeError();
+      unsubscribeCwd?.();
     };
   }, []);
 
@@ -523,10 +575,10 @@ export function useTerminalSession() {
 
     const isMac = typeof navigator !== "undefined" && /mac/i.test(navigator.userAgent);
     const isPowerShell = currentSession.shellType === "powershell";
-    const defaultUser = isMac ? "adityasalgotra" : "aditya.s.ctr";
-    const defaultCwd = workspaceRootRef.current || currentSession.cwd || (isMac ? "/Users/adityasalgotra/Downloads/THIRD_EYE" : "C:\\Users\\aditya.s.ctr");
+    const defaultUser = isMac ? "user" : "user";
+    const defaultCwd = workspaceRootRef.current || currentSession.cwd || "~";
     const defaultPrompt = isMac
-      ? `${defaultUser} ${defaultCwd.split("/").pop() || "workspace"} % `
+      ? `${defaultUser} ${defaultCwd === "~" ? "~" : (defaultCwd.split("/").pop() || "~")} % `
       : isPowerShell
       ? `PS ${defaultCwd}> `
       : `${defaultCwd}>`;
@@ -722,10 +774,17 @@ export function useTerminalSession() {
     const targetSession = sessionsRef.current.find((s) => s.id === curActiveId) || sessionsRef.current[0];
     const targetPtyId = targetSession?.ptyId || targetSession?.id;
 
+    if (targetSession) {
+      clearSessionDataCache(targetSession.id);
+      if (targetPtyId) clearSessionDataCache(targetPtyId);
+    }
+    clearActiveTerminal();
+
     if (window.electronAPI?.terminal?.cd) {
       window.electronAPI.terminal.cd({ ...(targetPtyId ? { id: targetPtyId } : {}), dir });
     } else if (targetPtyId && window.electronAPI) {
-      window.electronAPI.terminal.write(targetPtyId, `cd "${dir}"\r`);
+      const isMac = typeof navigator !== 'undefined' && /mac/i.test(navigator.userAgent);
+      window.electronAPI.terminal.write(targetPtyId, isMac ? `cd "${dir}" && clear\r` : `cd /d "${dir}" & cls\r`);
     }
 
     workspaceRootRef.current = dir;

@@ -56,14 +56,26 @@ export class TaskGraphManager {
    * Returns all steps whose dependencies are 100% complete and that are currently pending.
    */
   public getReadySteps(): TaskGraphStep[] {
+    const existingStepIds = new Set(this.dag.steps.map((s) => s.id));
     const completedIds = new Set(
       this.dag.steps.filter((s) => s.status === 'done').map((s) => s.id)
     );
 
-    return this.dag.steps.filter((s) => {
+    const ready = this.dag.steps.filter((s) => {
       if (s.status !== 'pending') return false;
-      return s.dependsOn.every((depId) => completedIds.has(depId));
+      const validDeps = s.dependsOn.filter((depId) => existingStepIds.has(depId) && depId !== s.id);
+      return validDeps.every((depId) => completedIds.has(depId));
     });
+
+    // Fallback: If no step is ready due to dependency circularity or LLM id mismatch, unblock the first pending step
+    if (ready.length === 0 && !this.anyRunning()) {
+      const firstPending = this.dag.steps.find((s) => s.status === 'pending');
+      if (firstPending) {
+        return [firstPending];
+      }
+    }
+
+    return ready;
   }
 
   public isComplete(): boolean {

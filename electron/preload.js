@@ -85,6 +85,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
      * @returns {Promise<string>}
      */
     getBuffer: (id) => ipcRenderer.invoke('terminal.getBuffer', { id }),
+
+    /**
+     * Query real current working directory of terminal session
+     * @param {Object} [options]
+     * @returns {Promise<string>}
+     */
+    getCwd: (options) => ipcRenderer.invoke('terminal.getCwd', options),
+
+    /**
+     * Subscribe to terminal session cwd updates
+     */
+    onCwdChanged: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('terminal.cwdChanged', handler);
+      return () => {
+        ipcRenderer.removeListener('terminal.cwdChanged', handler);
+      };
+    },
   },
 
   ai: {
@@ -252,10 +270,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
 
   git: {
-    status: () => ipcRenderer.invoke('git.status'),
-    init: () => ipcRenderer.invoke('git.init'),
-    stage: (filePath) => ipcRenderer.invoke('git.stage', filePath),
-    unstage: (filePath) => ipcRenderer.invoke('git.unstage', filePath),
+    status: (options) => ipcRenderer.invoke('git.status', options),
+    init: (options) => ipcRenderer.invoke('git.init', options),
+    stage: (filePath, options) => ipcRenderer.invoke('git.stage', filePath, options),
+    unstage: (filePath, options) => ipcRenderer.invoke('git.unstage', filePath, options),
     discard: (options) => ipcRenderer.invoke('git.discard', options),
     commit: (options) => ipcRenderer.invoke('git.commit', typeof options === 'string' ? { message: options } : options),
     push: (options) => ipcRenderer.invoke('git.push', options),
@@ -263,6 +281,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     fetch: (options) => ipcRenderer.invoke('git.fetch', options),
     setRemote: (options) => ipcRenderer.invoke('git.setRemote', options),
     clone: (options) => ipcRenderer.invoke('git.clone', options),
+    diff: (options) => ipcRenderer.invoke('git.diff', options),
     onStatusChanged: (callback) => {
       const handler = () => callback();
       ipcRenderer.on('git.statusChanged', handler);
@@ -303,6 +322,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
      */
     openPath: (targetPath) => ipcRenderer.invoke('workspace.openPath', targetPath),
     openFolder: () => ipcRenderer.invoke('dialog.openFolder'),
+    createAndOpenFolder: (params) => ipcRenderer.invoke('workspace.createAndOpenFolder', params),
     resetToDefault: () => ipcRenderer.invoke('workspace.resetToDefault'),
     close: () => ipcRenderer.invoke('workspace.close'),
   },
@@ -395,6 +415,12 @@ contextBridge.exposeInMainWorld('thirdEye', {
       ipcRenderer.on('terminal.exit', handler);
       return () => ipcRenderer.removeListener('terminal.exit', handler);
     },
+    getCwd: (options) => ipcRenderer.invoke('terminal.getCwd', options),
+    onCwdChanged: (callback) => {
+      const handler = (_event, payload) => callback(payload);
+      ipcRenderer.on('terminal.cwdChanged', handler);
+      return () => ipcRenderer.removeListener('terminal.cwdChanged', handler);
+    },
   },
 
   agent: {
@@ -420,10 +446,10 @@ contextBridge.exposeInMainWorld('thirdEye', {
   },
 
   git: {
-    status: () => ipcRenderer.invoke('git.status'),
-    init: () => ipcRenderer.invoke('git.init'),
-    stage: (filePath) => ipcRenderer.invoke('git.stage', filePath),
-    unstage: (filePath) => ipcRenderer.invoke('git.unstage', filePath),
+    status: (options) => ipcRenderer.invoke('git.status', options),
+    init: (options) => ipcRenderer.invoke('git.init', options),
+    stage: (filePath, options) => ipcRenderer.invoke('git.stage', filePath, options),
+    unstage: (filePath, options) => ipcRenderer.invoke('git.unstage', filePath, options),
     discard: (options) => ipcRenderer.invoke('git.discard', options),
     commit: (options) => ipcRenderer.invoke('git.commit', typeof options === 'string' ? { message: options } : options),
     push: (options) => ipcRenderer.invoke('git.push', options),
@@ -431,6 +457,7 @@ contextBridge.exposeInMainWorld('thirdEye', {
     fetch: (options) => ipcRenderer.invoke('git.fetch', options),
     setRemote: (options) => ipcRenderer.invoke('git.setRemote', options),
     clone: (options) => ipcRenderer.invoke('git.clone', options),
+    diff: (options) => ipcRenderer.invoke('git.diff', options),
     onStatusChanged: (callback) => {
       const handler = () => callback();
       ipcRenderer.on('git.statusChanged', handler);

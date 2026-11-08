@@ -26,14 +26,15 @@ import {
   executeWaitForPattern,
 } from './runTerminal';
 import { executeReadFileLines } from './readFileLines';
-import { executeSearchSymbols } from './searchSymbols';
+import { executeSearchSymbols, executeFindReferences } from './searchSymbols';
 import { executeGetDiagnostics } from './getDiagnostics';
 import { executeGitStatus, executeGitDiff } from './gitTools';
 import { executeApplyPatch } from './applyPatch';
 import { executeDeleteFile, executeCreateDir, executeMoveFile } from './fileOps';
 import { executeWebSearch, executeFetchUrl, executeFetchDocs } from './researchTools';
-import { executeOpenPreview, executeBrowserEval, executeTakeScreenshot } from './browserTools';
+import { executeOpenPreview, executeBrowserEval, executeTakeScreenshot, executeInspectDom } from './browserTools';
 import { executeAnalyzeCodebase, executePlanCheck } from './analysisTools';
+import { executeInitProjectFolder } from './initProjectFolder';
 
 export class ToolRegistry {
   private checkpointManager: CheckpointManager;
@@ -126,7 +127,7 @@ export class ToolRegistry {
 
     this.register({
       name: 'find_files',
-      aliases: ['findFiles'],
+      aliases: ['findFiles', 'glob'],
       description: 'Locate files in the workspace matching a pattern or filename.',
       argsSchema: z.object({
         pattern: z.string().describe('Filename or glob pattern to locate'),
@@ -222,22 +223,33 @@ export class ToolRegistry {
 
     this.register({
       name: 'edit_file',
-      aliases: ['editFile'],
-      description: 'Perform targeted search and replace modifications on a file with exact-match and fuzzy fallback.',
+      aliases: ['editFile', 'replace_file_content', 'replaceFileContent', 'replace_content'],
+      description: 'Perform targeted search and replace modifications on a file with exact-match, line-range targeting (startLine/endLine), whitespace normalization, and fuzzy fallback.',
       argsSchema: z.object({
         path: z.string().describe('File path to edit'),
-        oldString: z.string().optional().describe('Exact code snippet to replace'),
+        oldString: z.string().optional().describe('Code snippet to replace'),
         searchContent: z.string().optional().describe('Alias for oldString'),
+        targetContent: z.string().optional().describe('Alias for oldString'),
         newString: z.string().optional().describe('New replacement code snippet'),
         replaceContent: z.string().optional().describe('Alias for newString'),
+        replacementContent: z.string().optional().describe('Alias for newString'),
         replaceAll: z.boolean().optional().describe('Replace all occurrences instead of only the first'),
+        startLine: z.coerce.number().optional().describe('1-indexed starting line number for targeted slice replacement'),
+        endLine: z.coerce.number().optional().describe('1-indexed ending line number for targeted slice replacement'),
       }),
       risk: 'write',
       needsPermission: true,
       timeoutMs: 12000,
       roles: ['coder', 'debugger', 'orchestrator'],
       handler: async (args, ctx) =>
-        executeEditFile(args, ctx.workspaceRoot, ctx.checkpointManager, ctx.fileLockRegistry, ctx.agentId),
+        executeEditFile({
+          path: args.path,
+          oldString: args.oldString ?? args.searchContent ?? args.targetContent,
+          newString: args.newString ?? args.replaceContent ?? args.replacementContent,
+          replaceAll: args.replaceAll,
+          startLine: args.startLine,
+          endLine: args.endLine,
+        }, ctx.workspaceRoot, ctx.checkpointManager, ctx.fileLockRegistry, ctx.agentId),
     });
 
     this.register({
@@ -491,6 +503,61 @@ export class ToolRegistry {
       handler: async (args) => executePlanCheck(args),
     });
 
+    this.register({
+      name: 'find_references',
+      aliases: ['findReferences', 'searchReferences'],
+      description: 'Find all usages, imports, and references of a symbol across the workspace (Impact Analysis).',
+      argsSchema: z.object({
+        symbol: z.string().describe('Symbol or identifier name to search for (e.g. function, class, or interface name)'),
+      }),
+      risk: 'read',
+      needsPermission: false,
+      timeoutMs: 12000,
+      handler: async (args, ctx) => executeFindReferences(args, ctx.workspaceRoot),
+    });
+
+    this.register({
+      name: 'inspect_dom',
+      aliases: ['inspectDom', 'verify_dom'],
+      description: 'Inspect the live rendered DOM structure, verify tags, headings, buttons, and detect runtime error banners on dev server.',
+      argsSchema: z.object({
+        urlOrPort: z.union([z.string(), z.number()]).optional().default('5173').describe('Port or URL of running dev server to inspect'),
+      }),
+      risk: 'read',
+      needsPermission: false,
+      timeoutMs: 10000,
+      handler: async (args) => executeInspectDom(args),
+    });
+
+    this.register({
+      name: 'revert_checkpoint',
+      aliases: ['revertCheckpoint', 'rollback_checkpoint'],
+      description: 'Revert workspace files to a previously saved checkpoint snapshot.',
+      argsSchema: z.object({
+        checkpointId: z.string().describe('Checkpoint ID to revert to (e.g. cp_12345_abc)'),
+      }),
+      risk: 'write',
+      needsPermission: true,
+      timeoutMs: 10000,
+      roles: ['coder', 'debugger', 'orchestrator'],
+      handler: async (args, ctx) => ctx.checkpointManager.revertCheckpoint(args.checkpointId),
+    });
+
+    this.register({
+      name: 'initialize_project_folder',
+      aliases: ['initProjectFolder', 'create_project_folder', 'init_project'],
+      description: 'Initialize a clean, dedicated project folder (e.g. ~/Projects/my-app) and switch workspace to it to prevent polluting root directories.',
+      argsSchema: z.object({
+        folderName: z.string().describe('Name of the new project folder to create (e.g. "milkshake-store" or "ai-agent")'),
+        parentDir: z.string().optional().describe('Optional parent directory (defaults to ~/Projects)'),
+        initGit: z.boolean().optional().default(true).describe('Initialize a git repository inside the new folder'),
+      }),
+      risk: 'write',
+      needsPermission: false,
+      timeoutMs: 10000,
+      roles: ['coder', 'orchestrator', 'researcher'],
+      handler: async (args, ctx) => executeInitProjectFolder(args, ctx.workspaceRoot),
+    });
   }
 
   public getTool(name: string): ToolDefinition | undefined {
@@ -534,7 +601,7 @@ export class ToolRegistry {
         name: t.name,
         description: t.description,
         parameters: {
-          type: 'OBJECT',
+          type: 'object',
           properties,
           required: required.length > 0 ? required : undefined,
         },

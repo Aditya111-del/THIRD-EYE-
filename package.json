@@ -11,13 +11,13 @@
     "backend/ai-service"
   ],
   "scripts": {
-    "start": "electron .",
+    "start": "node scripts/run-electron.js .",
     "build:shared": "npm --prefix packages/shared run build",
     "smoke": "node scripts/smoke-test.js",
-    "dev": "concurrently -k -n \"PTY-SVC,AI-SVC,FRONTEND,ELECTRON\" -c \"blue,green,magenta,cyan\" \"npm --prefix backend/pty-service run start\" \"npm --prefix backend/ai-service run start\" \"npm --prefix Frontend/guide-build-main run dev\" \"wait-on tcp:3000 && electron .\"",
-    "dev:full": "concurrently -k -n \"PTY-SVC,AI-SVC,FRONTEND,ELECTRON\" -c \"blue,green,magenta,cyan\" \"npm --prefix backend/pty-service run start\" \"npm --prefix backend/ai-service run start\" \"npm --prefix Frontend/guide-build-main run dev\" \"wait-on tcp:3000 && electron .\"",
+    "dev": "concurrently -k -n \"PTY-SVC,AI-SVC,FRONTEND,ELECTRON\" -c \"blue,green,magenta,cyan\" \"npm --prefix backend/pty-service run start\" \"npm --prefix backend/ai-service run start\" \"npm --prefix Frontend/guide-build-main run dev\" \"wait-on tcp:3000 && node scripts/run-electron.js .\"",
+    "dev:full": "concurrently -k -n \"PTY-SVC,AI-SVC,FRONTEND,ELECTRON\" -c \"blue,green,magenta,cyan\" \"npm --prefix backend/pty-service run start\" \"npm --prefix backend/ai-service run start\" \"npm --prefix Frontend/guide-build-main run dev\" \"wait-on tcp:3000 && node scripts/run-electron.js .\"",
     "dev:frontend": "npm --prefix Frontend/guide-build-main run dev",
-    "dev:electron": "electron .",
+    "dev:electron": "node scripts/run-electron.js .",
     "dev:backend": "concurrently -k -n \"PTY,AI\" -c \"blue,green\" \"npm --prefix backend/pty-service run start\" \"npm --prefix backend/ai-service run start\"",
     "build:frontend": "npm --prefix Frontend/guide-build-main run build",
     "build:electron": "electron-builder",

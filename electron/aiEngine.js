@@ -275,7 +275,7 @@ class AIEngine {
       };
     } catch (err) {
       return {
-        cwd: targetCwd || process.cwd(),
+        cwd: targetCwd || os.homedir() || process.cwd(),
         directories: [],
         files: [],
         packageData: null,
@@ -753,7 +753,7 @@ Strictly respond with a valid JSON object:
       };
     }
 
-    const activeCwd = cwd || workspaceRoot || dirContext.cwd || process.cwd();
+    const activeCwd = cwd || workspaceRoot || dirContext.cwd || os.homedir() || process.cwd();
     const cwdName = path.basename(activeCwd) || 'Workspace';
 
     let cwdScopeSection = `\n================================================================================\n1. ACTIVE WORKING DIRECTORY FILESYSTEM SCOPE\n================================================================================\n` +
@@ -1320,7 +1320,7 @@ Git Branch: ${dirContext.gitInfo?.branch || 'None'}`;
     }
 
     // Resolve directory safely
-    const effectiveDir = (!isRemote && (dir.cwd === '~' || !dir.cwd)) ? process.cwd() : dir.cwd;
+    const effectiveDir = (!isRemote && (dir.cwd === '~' || !dir.cwd)) ? (workspaceRoot || os.homedir() || process.cwd()) : dir.cwd;
     const projectName = path.basename(effectiveDir) || 'Workspace';
 
     // Multi-session overview section if multiple sessions are active

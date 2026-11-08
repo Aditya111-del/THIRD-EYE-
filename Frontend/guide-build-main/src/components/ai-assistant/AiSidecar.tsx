@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   AlertTriangle,
   ArrowRight,
@@ -36,6 +37,7 @@ import {
   Filter,
   Pencil,
   Paperclip,
+  Image as ImageIcon,
   Search,
   Zap,
 } from "lucide-react";
@@ -50,9 +52,11 @@ import { AiMarkdownView } from "./AiMarkdownView";
 import { TaskGraphDAGViewer, TaskGraphStepUI } from "./TaskGraphDAGViewer";
 import { ToolCallCard, ToolCallCardProps } from "./ToolCallCard";
 import { PermissionPromptCard, PermissionRequestPayload } from "./PermissionPromptCard";
-import { DiffViewerModal, FileDiffItem } from "./DiffViewerModal";
+import { SidebarDiffReviewCard, FileDiffItem } from "./SidebarDiffReviewCard";
 import { ActivityFeedModal, ActivityFeedItem } from "./ActivityFeedModal";
 import { ArtifactsModal } from "./ArtifactsModal";
+import { AiConnectorModal } from "./AiConnectorModal";
+import { ModelSelectionPopover } from "./ModelSelectionPopover";
 import {
   AntigravityActionStream,
   AntigravityStreamItem,
@@ -88,17 +92,17 @@ export function AntigravityIcon({ className = "h-4 w-4" }: { className?: string 
 export const ThirdEyeIcon = AntigravityIcon;
 
 /**
- * Glowing AI Spark badge matching Screenshot 4
+ * Minimal Antigravity AI Spark badge
  */
 export function AiSparkBadge({ className }: { className?: string }) {
   return (
     <div
       className={cn(
-        "h-6 w-6 rounded-[5px] bg-gradient-to-br from-[#1E58FC] via-[#4F46E5] to-[#7C3AED] flex items-center justify-center shadow-[0_0_12px_rgba(79,70,229,0.55)] shrink-0 select-none",
+        "h-5 w-5 rounded-md bg-sky-500/10 border border-sky-400/20 flex items-center justify-center shrink-0 select-none text-sky-400 mt-0.5",
         className
       )}
     >
-      <Sparkles className="h-3.5 w-3.5 text-white fill-white" />
+      <Sparkles className="h-3 w-3" />
     </div>
   );
 }
@@ -136,6 +140,26 @@ export interface FileChangeMeta {
   files: string[];
 }
 
+export interface AttachedImage {
+  id: string;
+  name: string;
+  data: string; // base64 data url
+  mimeType: string;
+  size: number;
+}
+
+export interface AttachedDoc {
+  id: string;
+  name: string;
+  extension: string;
+  size: number;
+  sizeFormatted: string;
+  mimeType: string;
+  content: string; // text content or base64 data url
+  lineCount?: number;
+  isPdf?: boolean;
+}
+
 export interface ExtendedChatMsg extends ChatMsg {
   id?: string | undefined;
   suggestedCommand?: string | undefined;
@@ -152,6 +176,8 @@ export interface ExtendedChatMsg extends ChatMsg {
   fileChanges?: FileChangeMeta | undefined;
   feedback?: "liked" | "disliked" | null | undefined;
   imageThumbnail?: string | undefined;
+  images?: AttachedImage[] | undefined;
+  docs?: AttachedDoc[] | undefined;
   agentMode?: AgentMode | undefined;
   pendingPermission?: {
     id: string;
@@ -193,8 +219,8 @@ export function PlanCard({ items }: { items: PlanItem[] }) {
           if (item.status === "in_progress") {
             return (
               <div key={item.id} className="flex items-center gap-2 text-[12px] text-white">
-                <div className="h-4 w-4 rounded-[3px] bg-[#0C1E3C] border border-[#007ACC] flex items-center justify-center text-[#38BDF8] shrink-0">
-                  <div className="h-1.5 w-1.5 rounded-full bg-[#38BDF8]" />
+                <div className="h-4 w-4 rounded-[3px] bg-[#2A170A] border border-[#FF6B00] flex items-center justify-center text-[#FF9E4A] shrink-0">
+                  <div className="h-1.5 w-1.5 rounded-full bg-[#FF9E4A]" />
                 </div>
                 <span className="font-medium leading-tight">{item.label}</span>
               </div>
@@ -215,7 +241,7 @@ export function PlanCard({ items }: { items: PlanItem[] }) {
 }
 
 /**
- * Tool Execution Row matching Screenshot 4
+ * Minimal inline Tool Execution Row
  */
 export function ToolExecutionRow({
   query = "'useSession'",
@@ -225,21 +251,19 @@ export function ToolExecutionRow({
   count?: string;
 }) {
   return (
-    <div className="flex items-center justify-between px-2.5 py-1.5 rounded-[6px] bg-[#141519] border border-[#222328] text-xs font-mono my-2 select-none">
-      <div className="flex items-center gap-2 text-[#9E9EA8] truncate">
-        <Search className="h-3.5 w-3.5 text-[#70707B] shrink-0" />
-        <span className="truncate">Searched repo {query}</span>
-      </div>
-      <div className="flex items-center gap-1 shrink-0 ml-2">
-        <span className="text-[#8E8E98]">{count}</span>
-        <Check className="h-3.5 w-3.5 text-[#10B981] stroke-[2.5]" />
-      </div>
+    <div className="flex items-center gap-2 py-1 text-[11.5px] font-sans select-none my-1">
+      <Search className="h-3.5 w-3.5 text-sky-400 shrink-0" />
+      <span className="text-zinc-500 font-sans">Searched repo</span>
+      <span className="font-mono text-zinc-200 truncate max-w-[200px]">{query}</span>
+      <span className="text-[10px] font-mono px-1.5 py-0.2 rounded-full bg-white/[0.06] text-zinc-400 ml-auto shrink-0">
+        {count}
+      </span>
     </div>
   );
 }
 
 /**
- * Collapsible Edited Files Card matching Screenshot 5
+ * Minimal inline Edited Files Indicator
  */
 export function EditedFilesCard({
   files,
@@ -250,57 +274,75 @@ export function EditedFilesCard({
   onViewDiff?: () => void;
   onOpenFile?: (fileName: string) => void;
 }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const totalAdded = files.reduce((acc, f) => acc + f.added, 0);
   const totalRemoved = files.reduce((acc, f) => acc + f.removed, 0);
 
   return (
-    <div className="rounded-[8px] bg-[#121316] border border-[#23242A] overflow-hidden my-2 select-none shadow-sm">
-      <button
-        onClick={() => setOpen((p) => !p)}
-        className="w-full flex items-center justify-between px-3 py-2 text-xs font-mono hover:bg-[#18191F] transition-colors cursor-pointer text-left"
-      >
-        <div className="flex items-center gap-2 text-white">
-          <Pencil className="h-3.5 w-3.5 text-[#C4C4CC] shrink-0" />
-          <span className="font-mono text-[12px]">Edited {files.length} files</span>
-        </div>
-        <div className="flex items-center gap-2 font-mono text-[12px]">
-          <span className="text-[#10B981] font-bold">+{totalAdded}</span>
-          <span className="text-[#EF4444] font-bold">-{totalRemoved}</span>
+    <div className="my-1.5 font-sans select-none">
+      <div className="flex items-center gap-1.5 text-[11.5px] leading-snug">
+        <span className="text-emerald-400/90 font-medium shrink-0">✓</span>
+        <span className="text-zinc-400 font-sans tracking-tight">
+          Modified {files.length} {files.length === 1 ? "file" : "files"}
+        </span>
+        <span className="font-mono text-[10.5px] text-emerald-400 font-medium">+{totalAdded}</span>
+        <span className="font-mono text-[10.5px] text-rose-400 font-medium">-{totalRemoved}</span>
+        <button
+          type="button"
+          onClick={() => setOpen((p) => !p)}
+          className="inline-flex items-center gap-0.5 text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer group text-[11px] font-sans ml-1"
+          title={open ? "Collapse details" : "Expand details"}
+        >
+          <span>({files.length} {files.length === 1 ? "file" : "files"})</span>
           <ChevronDown
-            className={cn("h-3.5 w-3.5 text-[#888892] transition-transform", !open && "-rotate-90")}
+            className={cn(
+              "w-3 h-3 text-zinc-500 group-hover:text-zinc-300 transition-transform duration-200",
+              open && "rotate-180"
+            )}
           />
-        </div>
-      </button>
+        </button>
+      </div>
 
-      {open && (
-        <div className="px-3 pb-2.5 pt-1 space-y-1 text-xs font-mono border-t border-[#1D1E24]">
-          {files.map((file, idx) => (
-            <div
-              key={idx}
-              onClick={() => onOpenFile?.(file.name)}
-              className="flex items-center gap-2 text-[#D0D0D8] py-0.5 hover:text-white cursor-pointer group transition-colors"
-              title={`Click to open ${file.name} in Editor`}
-            >
-              <span className="h-1.5 w-1.5 rounded-full bg-[#0084FF] shrink-0" />
-              <span className="text-[#E0E0E6] group-hover:text-[#38BDF8] underline-offset-2 group-hover:underline">
-                {file.name}
-              </span>
-              <span className="text-[#666672]">·</span>
-              <span className="text-[#10B981]">+{file.added}</span>
-              <span className="text-[#EF4444]">-{file.removed}</span>
-            </div>
-          ))}
-          <div className="pt-1 flex items-center gap-3">
-            <button
-              onClick={onViewDiff}
-              className="text-[#8E8E98] hover:text-[#38BDF8] flex items-center gap-1 text-[11px] font-mono cursor-pointer transition-colors"
-            >
-              <span>&gt; view diff</span>
-            </button>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden space-y-1 pt-1.5 pb-0.5 border-l border-white/[0.08] ml-1.5 pl-2.5 my-1"
+          >
+            {files.map((file, idx) => (
+              <div
+                key={idx}
+                onClick={() => onOpenFile?.(file.name)}
+                className="flex items-center gap-2 py-0.5 text-[11.5px] leading-snug text-zinc-300 hover:text-white cursor-pointer group transition-colors"
+                title={`Click to open ${file.name} in Editor`}
+              >
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-400 shrink-0" />
+                <span className="font-mono text-zinc-200 group-hover:text-white group-hover:underline truncate max-w-[220px]">
+                  {file.name}
+                </span>
+                <div className="flex items-center gap-1 font-mono text-[10.5px] shrink-0 ml-auto">
+                  <span className="text-emerald-400">+{file.added}</span>
+                  <span className="text-rose-400">-{file.removed}</span>
+                </div>
+              </div>
+            ))}
+            {onViewDiff && (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={onViewDiff}
+                  className="text-zinc-400 hover:text-white flex items-center gap-1 text-[11px] font-mono cursor-pointer transition-colors"
+                >
+                  <span>&gt; view diff</span>
+                </button>
+              </div>
+            )}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -318,23 +360,35 @@ export function ThoughtAccordion({
   const [open, setOpen] = useState(false);
   if (!thoughts || thoughts.length === 0) return null;
   return (
-    <div className="my-1.5 select-none">
+    <div className="my-1 select-none">
       <button
+        type="button"
         onClick={() => setOpen((p) => !p)}
-        className="flex items-center gap-1.5 text-xs text-[#8E8E98] hover:text-[#C5C5CE] font-mono italic cursor-pointer transition-colors"
+        className="flex items-center gap-1.5 text-xs text-[#8E8E98] hover:text-[#C5C5CE] font-mono italic cursor-pointer transition-colors group py-0.5"
       >
         <ChevronRight
-          className={cn("h-3 w-3 text-[#6E6E78] transition-transform", open && "rotate-90")}
+          className={cn(
+            "h-3 w-3 text-[#6E6E78] group-hover:text-[#A0A0AA] transition-transform duration-200",
+            open && "rotate-90"
+          )}
         />
         <span>Thought for {duration}</span>
       </button>
-      {open && (
-        <div className="mt-1.5 pl-3 border-l border-[#2B2B32] space-y-1 text-[11px] font-mono text-[#8E8E98]">
-          {thoughts.map((t, i) => (
-            <div key={i}>{t}</div>
-          ))}
-        </div>
-      )}
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden mt-1 pl-3 border-l border-white/[0.08] space-y-1 text-[11px] font-mono text-[#8E8E98]"
+          >
+            {thoughts.map((t, i) => (
+              <div key={i}>{t}</div>
+            ))}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -399,7 +453,7 @@ function CodeBlock({
           {isExecutable && (
             <button
               onClick={() => onRun(code)}
-              className="flex items-center gap-1 rounded bg-[#007ACC] px-2 py-0.5 text-white hover:bg-[#008BE0] transition-colors cursor-pointer font-medium"
+              className="flex items-center gap-1 rounded bg-[#FF6B00] px-2 py-0.5 text-white hover:bg-[#FF852E] transition-colors cursor-pointer font-medium"
               title="Run in Integrated Terminal"
             >
               <Play className="h-2.5 w-2.5 fill-current" />
@@ -416,8 +470,13 @@ function CodeBlock({
 }
 
 const MODEL_OPTIONS = [
+  "Gemini 3.5 Flash",
+  "Gemini Flash Lite",
   "Gemini 3.8 Flash",
+  "Gemini 3.6 Flash",
   "Gemini 3.8 Pro",
+  "Ollama (gemma4:12b)",
+  "Ollama (qwen3.6:27b)",
   "Claude 3.5 Sonnet",
   "GPT-4o",
 ];
@@ -431,7 +490,7 @@ export function AiSidecar({
   editorApi?: EditorWorkspaceApi;
   onClose?: () => void;
 }) {
-  const [selectedModel, setSelectedModel] = useState("Gemini 3.8 Flash");
+  const [selectedModel, setSelectedModel] = useState("Nemotron 3 Ultra 550B (Free)");
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [agentMode, setAgentMode] = useState<AgentMode>("autonomous");
   const [input, setInput] = useState("");
@@ -446,6 +505,62 @@ export function AiSidecar({
   const [activityFeedOpen, setActivityFeedOpen] = useState(false);
   const [activityFeedItems, setActivityFeedItems] = useState<ActivityFeedItem[]>([]);
   const [lastCheckpointId, setLastCheckpointId] = useState<string | null>(null);
+
+  const handleOpenFileDiff = (file: FileDiffItem) => {
+    if ((editorApi as any)?.openDiffTab) {
+      (editorApi as any).openDiffTab(
+        file.filePath,
+        file.originalContent,
+        file.modifiedContent,
+        file.addedCount,
+        file.removedCount
+      );
+    } else if (editorApi?.openFile) {
+      editorApi.openFile(file.filePath);
+    }
+  };
+
+  const handleAcceptDiff = (filePath: string) => {
+    if ((editorApi as any)?.acceptDiff) {
+      (editorApi as any).acceptDiff(filePath);
+    }
+    setActiveDiffs((prev) => {
+      const rem = (prev || []).filter((f) => f.filePath !== filePath);
+      return rem.length > 0 ? rem : null;
+    });
+  };
+
+  const handleRejectDiff = (filePath: string) => {
+    if ((editorApi as any)?.rejectDiff) {
+      (editorApi as any).rejectDiff(filePath);
+    }
+    setActiveDiffs((prev) => {
+      const rem = (prev || []).filter((f) => f.filePath !== filePath);
+      return rem.length > 0 ? rem : null;
+    });
+  };
+
+  const handleAcceptAllDiffs = () => {
+    if ((editorApi as any)?.acceptAllDiffs) {
+      (editorApi as any).acceptAllDiffs();
+    } else if ((editorApi as any)?.acceptDiff && activeDiffs) {
+      for (const d of activeDiffs) {
+        (editorApi as any).acceptDiff(d.filePath);
+      }
+    }
+    setActiveDiffs(null);
+  };
+
+  const handleRejectAllDiffs = () => {
+    if ((editorApi as any)?.rejectAllDiffs) {
+      (editorApi as any).rejectAllDiffs();
+    } else if ((editorApi as any)?.rejectDiff && activeDiffs) {
+      for (const d of activeDiffs) {
+        (editorApi as any).rejectDiff(d.filePath);
+      }
+    }
+    setActiveDiffs(null);
+  };
   // Discovered Agent Skills (from /skills/*/SKILL.md)
   const [availableSkills, setAvailableSkills] = useState<Array<{
     id: string;
@@ -469,7 +584,16 @@ export function AiSidecar({
           setAvailableSkills(data.skills);
         }
       })
-      .catch(() => {});
+      .catch(() => { });
+
+    fetch("http://localhost:4002/api/ai/config")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data?.openAiModel && data.openAiModel.includes("nemotron")) {
+          setSelectedModel("Nemotron 3 Ultra 550B (Free)");
+        }
+      })
+      .catch(() => { });
   }, []);
 
   // Multi-Agent Sessions
@@ -485,7 +609,171 @@ export function AiSidecar({
 
   const [activeSessionId, setActiveSessionId] = useState<string>("agent-1");
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
+  const [attachedImages, setAttachedImages] = useState<AttachedImage[]>([]);
+  const [attachedDocs, setAttachedDocs] = useState<AttachedDoc[]>([]);
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  const [aiConnectorOpen, setAiConnectorOpen] = useState(false);
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  const getDocBadgeColor = (ext: string): { bg: string; text: string; border: string } => {
+    const e = ext.toLowerCase();
+    if (e === "pdf") return { bg: "bg-rose-950/70", text: "text-rose-400", border: "border-rose-600/40" };
+    if (["ts", "tsx"].includes(e)) return { bg: "bg-blue-950/70", text: "text-blue-400", border: "border-blue-600/40" };
+    if (["js", "jsx"].includes(e)) return { bg: "bg-amber-950/70", text: "text-amber-400", border: "border-amber-600/40" };
+    if (["py"].includes(e)) return { bg: "bg-emerald-950/70", text: "text-emerald-400", border: "border-emerald-600/40" };
+    if (["json", "csv", "sql", "yaml", "yml"].includes(e)) return { bg: "bg-orange-950/70", text: "text-orange-400", border: "border-orange-600/40" };
+    return { bg: "bg-purple-950/70", text: "text-purple-300", border: "border-purple-600/40" };
+  };
+
+  const processImageFile = useCallback((file: File) => {
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const result = e.target?.result as string;
+      if (result) {
+        setAttachedImages((prev) => [
+          ...prev,
+          {
+            id: `img-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            name: file.name || "Screenshot",
+            data: result,
+            mimeType: file.type || "image/png",
+            size: file.size,
+          },
+        ]);
+      }
+    };
+    reader.readAsDataURL(file);
+  }, []);
+
+  const processDocFile = useCallback((file: File) => {
+    const name = file.name;
+    const parts = name.split(".");
+    const extension = parts.length > 1 ? parts.pop()!.toLowerCase() : "txt";
+    const isPdf = extension === "pdf" || file.type === "application/pdf";
+    const size = file.size;
+    const sizeFormatted = formatFileSize(size);
+
+    if (isPdf) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const result = e.target?.result as string;
+        if (result) {
+          setAttachedDocs((prev) => [
+            ...prev,
+            {
+              id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+              name,
+              extension: "pdf",
+              size,
+              sizeFormatted,
+              mimeType: "application/pdf",
+              content: result,
+              isPdf: true,
+            },
+          ]);
+        }
+      };
+      reader.readAsDataURL(file);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const text = (e.target?.result as string) || "";
+        const lines = text.split("\n").length;
+        setAttachedDocs((prev) => [
+          ...prev,
+          {
+            id: `doc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            name,
+            extension,
+            size,
+            sizeFormatted,
+            mimeType: file.type || "text/plain",
+            content: text,
+            lineCount: lines,
+            isPdf: false,
+          },
+        ]);
+      };
+      reader.readAsText(file);
+    }
+  }, []);
+
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach(processImageFile);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  }, [processImageFile]);
+
+  const handleDocSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach(processDocFile);
+    if (docInputRef.current) {
+      docInputRef.current.value = "";
+    }
+  }, [processDocFile]);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i];
+      if (item && item.type.indexOf("image") !== -1) {
+        const file = item.getAsFile();
+        if (file) {
+          processImageFile(file);
+        }
+      }
+    }
+  }, [processImageFile]);
+
+  const handleRemoveImage = useCallback((id: string) => {
+    setAttachedImages((prev) => prev.filter((img) => img.id !== id));
+  }, []);
+
+  const handleRemoveDoc = useCallback((id: string) => {
+    setAttachedDocs((prev) => prev.filter((d) => d.id !== id));
+  }, []);
+
+  const handleDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(true);
+  }, []);
+
+  const handleDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+  }, []);
+
+  const handleDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingOver(false);
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      Array.from(files).forEach((f) => {
+        if (f.type.startsWith("image/")) {
+          processImageFile(f);
+        } else {
+          processDocFile(f);
+        }
+      });
+    }
+  }, [processImageFile, processDocFile]);
 
   // Reviewable Artifacts State (§6 of Architecture)
   const [artifacts, setArtifacts] = useState<AgentArtifact[]>([]);
@@ -555,11 +843,26 @@ export function AiSidecar({
 
   const handleSend = async (overridePrompt?: string) => {
     const userPrompt = (overridePrompt || input).trim();
-    if (!userPrompt || loading) return;
+    const imagesToSend = overridePrompt ? [] : [...attachedImages];
+    const docsToSend = overridePrompt ? [] : [...attachedDocs];
+    if ((!userPrompt && imagesToSend.length === 0 && docsToSend.length === 0) || loading) return;
+
+    let displayLabel = userPrompt;
+    if (!displayLabel) {
+      if (imagesToSend[0]) {
+        displayLabel = `Image (${imagesToSend[0].name})`;
+      } else if (docsToSend[0]) {
+        displayLabel = `Doc (${docsToSend[0].name})`;
+      } else {
+        displayLabel = "Task";
+      }
+    }
 
     const userMsg: ExtendedChatMsg = {
       role: "user",
-      text: userPrompt,
+      text: userPrompt || (imagesToSend.length > 0 ? "Attached image" : docsToSend.length > 0 ? `Attached ${docsToSend.length} document(s)` : ""),
+      images: imagesToSend.length > 0 ? imagesToSend : undefined,
+      docs: docsToSend.length > 0 ? docsToSend : undefined,
       timestamp: "Just now",
     };
 
@@ -576,9 +879,9 @@ export function AiSidecar({
         if (s.id !== activeSessionId) return s;
         const isFirstMessage = s.messages.length === 0;
         const newName = isFirstMessage
-          ? userPrompt.length > 22
-            ? userPrompt.slice(0, 22) + "..."
-            : userPrompt
+          ? displayLabel.length > 22
+            ? displayLabel.slice(0, 22) + "..."
+            : displayLabel
           : s.name;
         return {
           ...s,
@@ -589,6 +892,10 @@ export function AiSidecar({
     );
 
     setInput("");
+    if (!overridePrompt) {
+      setAttachedImages([]);
+      setAttachedDocs([]);
+    }
     setLoading(true);
     setThinkingStep("Thinking...");
 
@@ -605,7 +912,18 @@ export function AiSidecar({
       if (!effectiveWorkspace && window.electronAPI?.fs?.getWorkspaceRoot) {
         try {
           effectiveWorkspace = (await window.electronAPI.fs.getWorkspaceRoot()) || "";
-        } catch {}
+        } catch { }
+      }
+
+      let cwdTree = "";
+      const scanTarget = effectiveWorkspace || currentCwd;
+      if (scanTarget && window.electronAPI?.fs?.scanTree) {
+        try {
+          const scanRes = await window.electronAPI.fs.scanTree(scanTarget, { maxDepth: 4, maxEntries: 300 });
+          if (scanRes?.success && scanRes.treeString) {
+            cwdTree = scanRes.treeString;
+          }
+        } catch (_) { }
       }
 
       const openTabs = (editorApi?.openFiles || []).map((f) => ({ path: f.path, name: f.name }));
@@ -614,14 +932,38 @@ export function AiSidecar({
         ? (api.active.lines || []).slice(-30).map((l) => l.text).join("\n")
         : "";
 
-      const mappedModel = selectedModel.includes("Pro")
-        ? "gemini-pro-latest"
-        : selectedModel.includes("GPT")
-        ? "gpt-4o"
-        : "gemini-3.1-flash-lite-preview";
+      let mappedModel = selectedModel;
+      if (selectedModel.includes("nemotron") || selectedModel.includes("Nemotron")) {
+        mappedModel = "nvidia/nemotron-3-ultra-550b-a55b:free";
+      } else if (selectedModel.includes("gemma4") || selectedModel.includes("Gemma")) {
+        mappedModel = "gemma4:12b";
+      } else if (selectedModel.includes("qwen")) {
+        mappedModel = "qwen3.6:27b";
+      } else if (selectedModel.includes("3.8 Flash") || selectedModel === "Gemini 3.8 Flash") {
+        mappedModel = "gemini-3.8-flash";
+      } else if (selectedModel.includes("3.5") || selectedModel.includes("Lite") || selectedModel === "Gemini 3.5 Flash") {
+        mappedModel = "gemini-3.5-flash-lite";
+      } else if (selectedModel.includes("3.6")) {
+        mappedModel = "gemini-3.6-flash";
+      } else if (selectedModel.includes("Sonnet")) {
+        mappedModel = "claude-sonnet-4.6";
+      } else if (selectedModel.includes("Opus")) {
+        mappedModel = "claude-opus-4.6";
+      } else if (selectedModel.includes("GPT-OSS") || selectedModel.includes("120B")) {
+        mappedModel = "gpt-oss-120b";
+      } else if (selectedModel.includes("DeepSeek") || selectedModel.includes("R1")) {
+        mappedModel = "deepseek-r1";
+      } else if (selectedModel.includes("Pro")) {
+        mappedModel = "gemini-pro-latest";
+      } else if (selectedModel.includes("GPT") || selectedModel.includes("4o")) {
+        mappedModel = "gpt-4o";
+      } else if (selectedModel.includes("Ollama (")) {
+        const match = selectedModel.match(/\(([^)]+)\)/);
+        if (match && match[1]) mappedModel = match[1];
+      }
 
       const previousTurns = (activeSession?.messages || [])
-        .filter((m) => !m.isStreaming && (m.text || m.suggestedCommand || (m.traces && m.traces.length > 0) || (m.toolCallCards && m.toolCallCards.length > 0)))
+        .filter((m) => !m.isStreaming && (m.text || m.suggestedCommand || (m.traces && m.traces.length > 0) || (m.toolCallCards && m.toolCallCards.length > 0) || (m.images && m.images.length > 0) || (m.docs && m.docs.length > 0)))
         .map((m) => {
           let content = m.text || "";
           if (!content && m.suggestedCommand) {
@@ -647,18 +989,64 @@ export function AiSidecar({
           return {
             role: m.role === "assistant" ? "assistant" : "user",
             content: content || (m.role === "assistant" ? "Action completed." : ""),
+            images: m.images ? m.images.map((img) => ({
+              data: img.data,
+              mimeType: img.mimeType,
+              name: img.name,
+            })) : undefined,
           };
         })
-        .filter((m) => m.content && m.content.trim().length > 0);
-      const fullMessages = [...previousTurns, { role: "user", content: userPrompt }];
+        .filter((m) => (m.content && m.content.trim().length > 0) || (m.images && m.images.length > 0));
+
+      let promptWithDocs = userPrompt;
+      if (docsToSend.length > 0) {
+        const docTextBlocks = docsToSend
+          .filter((d) => !d.isPdf)
+          .map((d) => `--- Attached Document: ${d.name} (${d.sizeFormatted}, ${d.lineCount || 1} lines) ---\n${d.content}\n--- End of ${d.name} ---`)
+          .join("\n\n");
+        if (docTextBlocks) {
+          promptWithDocs = promptWithDocs ? `${promptWithDocs}\n\n${docTextBlocks}` : `Please analyze the attached document(s):\n\n${docTextBlocks}`;
+        }
+      }
+
+      const activeUserTurnImages = imagesToSend.map((img) => ({
+        data: img.data,
+        mimeType: img.mimeType,
+        name: img.name,
+      }));
+
+      // Add PDF documents into multimodal inlineData
+      for (const d of docsToSend.filter((d) => d.isPdf)) {
+        activeUserTurnImages.push({
+          data: d.content,
+          mimeType: "application/pdf",
+          name: d.name,
+        });
+      }
+
+      const fullMessages = [
+        ...previousTurns,
+        {
+          role: "user",
+          content: promptWithDocs || (activeUserTurnImages.length > 0 ? "Attached document/image" : ""),
+          images: activeUserTurnImages.length > 0 ? activeUserTurnImages : undefined,
+        },
+      ];
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
 
       const response = await fetch("http://localhost:4002/api/ai/agent/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
         body: JSON.stringify({
           messages: fullMessages,
+          images: activeUserTurnImages.length > 0 ? activeUserTurnImages : undefined,
           sessionId: activeSessionId,
           workspaceRoot: effectiveWorkspace || currentCwd || "",
+          cwd: currentCwd || effectiveWorkspace || "",
+          cwdTree,
           openTabs,
           activeFile,
           terminalTail,
@@ -710,9 +1098,22 @@ export function AiSidecar({
                   const msgs = [...s.messages];
                   const last = msgs[msgs.length - 1];
                   if (last && last.role === "assistant") {
+                    const stream: AntigravityStreamItem[] = [...(last.actionStreamItems || [])];
+                    for (const st of steps) {
+                      if (!stream.some((it) => it.id === `task-${st.id}`)) {
+                        stream.push({
+                          id: `task-${st.id}`,
+                          type: "terminal",
+                          command: `Checked task ${st.title}`,
+                          status: st.status === "running" ? "running" : st.status === "done" ? "completed" : "pending",
+                          timestamp: Date.now(),
+                        } as any);
+                      }
+                    }
                     msgs[msgs.length - 1] = {
                       ...last,
                       taskGraphSteps: steps,
+                      actionStreamItems: stream,
                     };
                   }
                   return { ...s, messages: msgs };
@@ -736,8 +1137,48 @@ export function AiSidecar({
                   if (s.id !== activeSessionId) return s;
                   const msgs = [...s.messages];
                   const last = msgs[msgs.length - 1];
-                  if (last && last.role === "assistant" && last.taskGraphSteps) {
-                    const updatedSteps: TaskGraphStepUI[] = last.taskGraphSteps.map((st): TaskGraphStepUI => {
+                  if (last && last.role === "assistant") {
+                    const stream: AntigravityStreamItem[] = [...(last.actionStreamItems || [])];
+                    const existingIdx = stream.findIndex((it) => it.id === `task-${stepId}`);
+                    const stepObj = (last.taskGraphSteps || []).find((st) => st.id === stepId);
+                    const title = stepObj?.title || `Task ${stepId}`;
+
+                    if (status === "done") {
+                      if (existingIdx !== -1) {
+                        stream[existingIdx] = {
+                          ...stream[existingIdx],
+                          status: "completed",
+                          command: `${title} finished`,
+                        } as any;
+                      } else {
+                        stream.push({
+                          id: `task-${stepId}-done`,
+                          type: "terminal",
+                          command: `${title} finished`,
+                          status: "completed",
+                          timestamp: Date.now(),
+                        } as any);
+                      }
+                    } else if (status === "running") {
+                      if (existingIdx !== -1) {
+                        stream[existingIdx] = {
+                          ...stream[existingIdx],
+                          status: "running",
+                          command: `Checked task ${title}`,
+                        } as any;
+                      } else {
+                        stream.push({
+                          id: `task-${stepId}`,
+                          type: "terminal",
+                          command: `Checked task ${title}`,
+                          status: "running",
+                          timestamp: Date.now(),
+                        } as any);
+                      }
+                      setThinkingStep(`Checked task ${title}`);
+                    }
+
+                    const updatedSteps: TaskGraphStepUI[] = (last.taskGraphSteps || []).map((st): TaskGraphStepUI => {
                       if (st.id !== stepId) return st;
                       const nextRetry = status === "pending" && error ? (st.retryCount || 0) + 1 : (st.retryCount ?? 0);
                       const updated: TaskGraphStepUI = {
@@ -752,6 +1193,7 @@ export function AiSidecar({
                     msgs[msgs.length - 1] = {
                       ...last,
                       taskGraphSteps: updatedSteps,
+                      actionStreamItems: stream,
                     };
                   }
                   return { ...s, messages: msgs };
@@ -771,6 +1213,33 @@ export function AiSidecar({
                 },
                 ...prev,
               ]);
+            } else if (eventType === "workspace.root_switched" || eventType === "workspace.rootChanged") {
+              const newRoot = eventData.root || eventData.folderPath;
+              if (newRoot) {
+                if (window.electronAPI?.workspace?.openPath) {
+                  window.electronAPI.workspace.openPath(newRoot);
+                }
+                if (window.electronAPI?.terminal?.cd) {
+                  window.electronAPI.terminal.cd({ dir: newRoot });
+                }
+                if (editorApi?.setWorkspaceRoot) {
+                  editorApi.setWorkspaceRoot(newRoot);
+                }
+                if (typeof window !== "undefined") {
+                  (window as any).__THIRD_EYE_WORKSPACE_ROOT__ = newRoot;
+                }
+                setActivityFeedItems((prev) => [
+                  {
+                    id: `act_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+                    timestamp: Date.now(),
+                    agentId: "DirectoryGuard",
+                    type: "thought",
+                    title: `Switched Workspace Context to: ${newRoot}`,
+                    detail: `Protected directory avoided. Switched workspace to ${newRoot}`,
+                  },
+                  ...prev,
+                ]);
+              }
             } else if (eventType === "tool.start") {
               const { agentId, name, args, risk } = eventData;
               setThinkingStep(`[${risk?.toUpperCase() || "TOOL"}] ${name}...`);
@@ -812,6 +1281,15 @@ export function AiSidecar({
                       toolLower.includes("command") ||
                       toolLower.includes("exec");
 
+                    const isWrite =
+                      risk === "write" ||
+                      toolLower.includes("write") ||
+                      toolLower.includes("edit") ||
+                      toolLower.includes("diff") ||
+                      toolLower.includes("patch") ||
+                      toolLower.includes("replace") ||
+                      toolLower.includes("create");
+
                     if (isSearch) {
                       const query =
                         args?.query ||
@@ -823,6 +1301,26 @@ export function AiSidecar({
                         id: `search-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
                         type: "search",
                         query: typeof query === "string" ? query : JSON.stringify(query),
+                        status: "running",
+                        timestamp: Date.now(),
+                      });
+                    } else if (isWrite) {
+                      const target =
+                        args?.path ||
+                        args?.filePath ||
+                        args?.AbsolutePath ||
+                        args?.TargetFile ||
+                        args?.file_path ||
+                        args?.target_file ||
+                        "";
+                      const fileName = target ? target.split("/").pop() || target : "file";
+                      stream.push({
+                        id: `edit-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+                        type: "file",
+                        subType: "editing",
+                        filePath: target,
+                        fileName,
+                        fileType: getFileTypeBadge(target).type,
                         status: "running",
                         timestamp: Date.now(),
                       });
@@ -962,7 +1460,21 @@ export function AiSidecar({
                     if (isWrite) {
                       const filePath =
                         result?.diff?.path || result?.path || result?.filePath || "";
-                      if (filePath) {
+                      const lastEditIdx = stream.findIndex(
+                        (it) => it.type === "file" && (it as any).subType === "editing" && it.status === "running"
+                      );
+                      if (lastEditIdx !== -1) {
+                        const existing = stream[lastEditIdx] as any;
+                        stream[lastEditIdx] = {
+                          ...existing,
+                          filePath: filePath || existing.filePath,
+                          fileName: (filePath || existing.filePath)?.split("/").pop() || existing.fileName,
+                          status: (result?.success ?? true) ? "completed" : "failed",
+                          subType: (result?.success ?? true) ? "modified" : "failed",
+                          addedCount: result?.diff?.addedCount ?? existing.addedCount ?? 0,
+                          removedCount: result?.diff?.removedCount ?? existing.removedCount ?? 0,
+                        };
+                      } else if (filePath) {
                         const fileName = filePath.split("/").pop() || filePath;
                         const typeInfo = getFileTypeBadge(filePath);
                         stream.push({
@@ -1004,34 +1516,33 @@ export function AiSidecar({
                 "";
 
               if (diffObj && targetPath) {
+                const diffItem: FileDiffItem = {
+                  filePath: targetPath,
+                  originalContent: origContent,
+                  modifiedContent: modContent,
+                  addedCount: diffObj.addedCount,
+                  removedCount: diffObj.removedCount,
+                };
                 setActiveDiffs((prev) => [
                   ...(prev || []).filter((d) => d.filePath !== targetPath),
-                  {
-                    filePath: targetPath,
-                    originalContent: origContent,
-                    modifiedContent: modContent,
-                    addedCount: diffObj.addedCount,
-                    removedCount: diffObj.removedCount,
-                  },
+                  diffItem,
                 ]);
-              }
 
-              // Embed code live directly into Monaco Editor
-              if (targetPath && editorApi) {
-                if (modContent) {
-                  editorApi.updateContent(targetPath, modContent);
-                } else if (window.electronAPI?.fs?.readFile) {
-                  window.electronAPI.fs.readFile(targetPath).then((r: any) => {
-                    if (r?.success && typeof r.content === "string") {
-                      editorApi.updateContent(targetPath, r.content);
-                    } else {
-                      editorApi.openFile(targetPath);
-                    }
-                  }).catch(() => {
+                // Automatically open directly inside Monaco Diff Tab
+                if ((editorApi as any)?.openDiffTab) {
+                  (editorApi as any).openDiffTab(
+                    targetPath,
+                    origContent,
+                    modContent,
+                    diffObj.addedCount,
+                    diffObj.removedCount
+                  );
+                } else if (editorApi) {
+                  if (modContent) {
+                    editorApi.updateContent(targetPath, modContent);
+                  } else {
                     editorApi.openFile(targetPath);
-                  });
-                } else {
-                  editorApi.openFile(targetPath);
+                  }
                 }
               }
             } else if (eventType === "agent.file_changed") {
@@ -1068,28 +1579,31 @@ export function AiSidecar({
                 const origContent = diff?.originalContent || diff?.original || "";
                 const modContent = diff?.modifiedContent || diff?.modified || "";
                 if (diff) {
+                  const diffItem: FileDiffItem = {
+                    filePath,
+                    originalContent: origContent,
+                    modifiedContent: modContent,
+                    addedCount: diff.addedCount,
+                    removedCount: diff.removedCount,
+                  };
                   setActiveDiffs((prev) => [
                     ...(prev || []).filter((d) => d.filePath !== filePath),
-                    {
-                      filePath,
-                      originalContent: origContent,
-                      modifiedContent: modContent,
-                      addedCount: diff.addedCount,
-                      removedCount: diff.removedCount,
-                    },
+                    diffItem,
                   ]);
-                }
 
-                // Live code embedding directly in Monaco Editor
-                if (editorApi) {
-                  if (modContent) {
-                    editorApi.updateContent(filePath, modContent);
-                  } else if (window.electronAPI?.fs?.readFile) {
-                    window.electronAPI.fs.readFile(filePath).then((r: any) => {
-                      if (r?.success && typeof r.content === "string") {
-                        editorApi.updateContent(filePath, r.content);
-                      }
-                    }).catch(() => {});
+                  // Automatically open directly inside Monaco Diff Tab
+                  if ((editorApi as any)?.openDiffTab) {
+                    (editorApi as any).openDiffTab(
+                      filePath,
+                      origContent,
+                      modContent,
+                      diff.addedCount,
+                      diff.removedCount
+                    );
+                  } else if (editorApi) {
+                    if (modContent) {
+                      editorApi.updateContent(filePath, modContent);
+                    }
                   }
                 }
               }
@@ -1135,6 +1649,7 @@ export function AiSidecar({
             } else if (eventType === "agent.delta") {
               if (eventData.delta) {
                 accumulatedText += eventData.delta;
+                setThinkingStep("");
                 setAgentSessions((prev) =>
                   prev.map((s) => {
                     if (s.id !== activeSessionId) return s;
@@ -1152,23 +1667,30 @@ export function AiSidecar({
                 );
               }
             } else if (eventType === "agent.done") {
-              const summary = eventData.summary || accumulatedText;
-              setAgentSessions((prev) =>
-                prev.map((s) => {
-                  if (s.id !== activeSessionId) return s;
-                  const msgs = [...s.messages];
-                  const last = msgs[msgs.length - 1];
-                  if (last && last.role === "assistant") {
-                    msgs[msgs.length - 1] = {
-                      ...last,
-                      text: summary,
-                      isStreaming: false,
-                    };
-                  }
-                  return { ...s, messages: msgs };
-                })
-              );
-              setLoading(false);
+              const isSupervisorDone =
+                !eventData.agentId ||
+                eventData.agentId === "orchestrator" ||
+                eventData.agentId === "autonomous";
+
+              if (isSupervisorDone) {
+                const summary = eventData.summary || accumulatedText;
+                setAgentSessions((prev) =>
+                  prev.map((s) => {
+                    if (s.id !== activeSessionId) return s;
+                    const msgs = [...s.messages];
+                    const last = msgs[msgs.length - 1];
+                    if (last && last.role === "assistant") {
+                      msgs[msgs.length - 1] = {
+                        ...last,
+                        text: summary || last.text,
+                        isStreaming: false,
+                      };
+                    }
+                    return { ...s, messages: msgs };
+                  })
+                );
+                setLoading(false);
+              }
             } else if (eventType === "thought") {
               const thoughts = eventData.thoughts || [];
               if (thoughts[0]) setThinkingStep(thoughts[0]);
@@ -1208,7 +1730,7 @@ export function AiSidecar({
               const name = tc?.name || "tool";
               setThinkingStep(`Executing: ${name}...`);
             } else if (eventType === "tool_result") {
-              // Legacy handled
+              setThinkingStep("Synthesizing answer...");
             } else if (eventType === "file_change") {
               const files = eventData.files || [];
               setAgentSessions((prev) =>
@@ -1245,7 +1767,7 @@ export function AiSidecar({
                 }
               }
             } else if (eventType === "delta") {
-              if (eventData.delta) {
+              if (eventData.delta && !accumulatedText.endsWith(eventData.delta)) {
                 accumulatedText += eventData.delta;
                 setAgentSessions((prev) =>
                   prev.map((s) => {
@@ -1280,8 +1802,9 @@ export function AiSidecar({
                   return { ...s, messages: msgs };
                 })
               );
+              setThinkingStep("");
               setLoading(false);
-              return;
+              break;
             } else if (eventType === "finish") {
               const finalReply = eventData.reply || accumulatedText;
               setAgentSessions((prev) =>
@@ -1299,8 +1822,9 @@ export function AiSidecar({
                   return { ...s, messages: msgs };
                 })
               );
+              setThinkingStep("");
               setLoading(false);
-              return;
+              break;
             }
           }
         }
@@ -1328,10 +1852,16 @@ export function AiSidecar({
             return { ...s, messages: msgs };
           })
         );
+        setThinkingStep("");
         setLoading(false);
         return;
       }
-    } catch (_streamErr) {
+    } catch (_streamErr: any) {
+      if (_streamErr?.name === "AbortError") {
+        setLoading(false);
+        setThinkingStep("");
+        return;
+      }
       // Fall through to electron / local fallback
     }
 
@@ -1390,6 +1920,7 @@ export function AiSidecar({
           })
         );
       } finally {
+        setThinkingStep("");
         setLoading(false);
       }
     } else {
@@ -1417,6 +1948,7 @@ export function AiSidecar({
             return { ...s, messages: msgs };
           })
         );
+        setThinkingStep("");
         setLoading(false);
       }, 350);
     }
@@ -1439,7 +1971,15 @@ export function AiSidecar({
   };
 
   const handleOpenFile = (filename: string) => {
-    if (editorApi) {
+    const diffMatch = activeDiffs?.find(
+      (d) =>
+        d.filePath === filename ||
+        d.filePath.endsWith("/" + filename) ||
+        filename.endsWith("/" + d.filePath)
+    );
+    if (diffMatch && (editorApi as any)?.openDiffTab) {
+      handleOpenFileDiff(diffMatch);
+    } else if (editorApi) {
       editorApi.openFile(filename);
     }
   };
@@ -1471,18 +2011,43 @@ export function AiSidecar({
           command: activePermissionRequest.command,
         }),
       });
-    } catch {}
+    } catch { }
     setActivePermissionRequest(null);
   };
 
   const handleStopAgent = async () => {
+    // 1. Immediately abort active stream reader in browser
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+
+    // 2. Tell backend to halt all running workers and loops
     try {
       await fetch("http://localhost:4002/api/ai/agent/stop", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionId: activeSessionId }),
       });
-    } catch {}
+    } catch { }
+
+    // 3. Mark the message as paused/stopped by user
+    setAgentSessions((prev) =>
+      prev.map((s) => {
+        if (s.id !== activeSessionId) return s;
+        const msgs = [...s.messages];
+        const last = msgs[msgs.length - 1];
+        if (last && last.role === "assistant") {
+          msgs[msgs.length - 1] = {
+            ...last,
+            text: last.text ? `${last.text}\n\n*[Execution stopped by user]*` : "*[Execution stopped by user]*",
+            isStreaming: false,
+          };
+        }
+        return { ...s, messages: msgs };
+      })
+    );
+
     setLoading(false);
     setThinkingStep("");
   };
@@ -1528,9 +2093,9 @@ export function AiSidecar({
   };
 
   return (
-    <aside className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-[#181818] border-l border-[#262626] font-sans select-none text-[#D0D0D8]">
+    <aside className="flex h-full w-full min-w-0 flex-col overflow-hidden bg-[#101114] border-l border-white/[0.06] font-sans select-none text-[#D0D0D8]">
       {/* ── 1. Top Header (Minimal & Clean matching Filesystem Sidebar) ── */}
-      <div className="relative flex h-[35px] shrink-0 items-center justify-between border-b border-[#262626] bg-[#181818] px-2 select-none overflow-hidden">
+      <div className="relative flex h-[35px] shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#101114] px-2.5 select-none overflow-hidden">
         {/* Left: Agents label + count */}
         <div className="flex items-center gap-2 shrink-0">
           <span className="text-[12.5px] font-medium text-zinc-200 tracking-tight">Agents</span>
@@ -1698,7 +2263,7 @@ export function AiSidecar({
       </div>
 
       {/* ── 2. Multi-Agent Session Tabs ── */}
-      <div className="flex items-center border-b border-[#262626] bg-[#181818] px-2 py-1 gap-1 overflow-x-auto scrollbar-none">
+      <div className="flex items-center border-b border-white/[0.06] bg-[#101114] px-2 py-1 gap-1 overflow-x-auto scrollbar-none">
         {agentSessions.map((session) => {
           const isActive = session.id === activeSessionId;
           return (
@@ -1706,10 +2271,10 @@ export function AiSidecar({
               key={session.id}
               onClick={() => setActiveSessionId(session.id)}
               className={cn(
-                "group flex items-center gap-1.5 px-2.5 py-1 text-[11.5px] font-mono rounded transition-colors whitespace-nowrap cursor-pointer select-none",
+                "group flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-sans rounded-md transition-colors whitespace-nowrap cursor-pointer select-none",
                 isActive
-                  ? "bg-[#252528] text-white font-medium border border-[#333338] shadow-sm"
-                  : "text-[#8E8E98] hover:text-[#D0D0D8] hover:bg-[#202022]"
+                  ? "bg-white/[0.08] text-white font-medium border border-white/[0.08]"
+                  : "text-zinc-400 hover:text-zinc-200 hover:bg-white/[0.03]"
               )}
             >
               <span className={cn("h-1.5 w-1.5 rounded-full shrink-0", session.dotColor)} />
@@ -1730,7 +2295,7 @@ export function AiSidecar({
       </div>
 
       {/* ── 3. Messages Body ── */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3.5 scrollbar-thin bg-[#181818]">
+      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3.5 scrollbar-thin bg-[#101114]">
         {(!activeSession || activeSession.messages.length === 0) && (
           <div className="flex flex-col items-center justify-center h-full text-center px-4 py-12">
             <div className="h-10 w-10 rounded-xl bg-white/[0.04] border border-white/[0.08] flex items-center justify-center mb-3">
@@ -1771,65 +2336,125 @@ export function AiSidecar({
         {activeSession?.messages.map((m, idx) => {
           if (m.role === "user") {
             return (
-              <div key={idx} className="w-full select-text my-2.5">
-                <div className="w-full rounded-xl bg-[#18181F] border border-white/10 p-3.5 text-[12.5px] text-[#E5E5EB] font-sans leading-relaxed shadow-sm">
-                  <AiMarkdownView
-                    content={m.text}
-                    isStreaming={false}
-                    onOpenFile={handleOpenFile}
-                  />
+              <motion.div
+                key={m.id || `user-${idx}`}
+                initial={{ opacity: 0, y: 6 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                className="w-full select-text my-2"
+              >
+                <div className="w-full rounded-lg bg-white/[0.035] border border-white/[0.06] px-3.5 py-2.5 text-[12.5px] text-zinc-200 font-sans leading-relaxed">
+                  {m.images && m.images.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2.5">
+                      {m.images.map((img, imgIdx) => (
+                        <div
+                          key={img.id || imgIdx}
+                          className="relative rounded-lg overflow-hidden border border-white/15 bg-black/40 group max-w-[220px]"
+                        >
+                          <img
+                            src={img.data}
+                            alt={img.name || `Attached image ${imgIdx + 1}`}
+                            className="max-h-44 w-auto object-cover cursor-pointer hover:opacity-90 transition-opacity"
+                            onClick={() => window.open(img.data, "_blank")}
+                            title="Click to view full size"
+                          />
+                          {img.name && (
+                            <div className="px-2 py-1 text-[10.5px] text-zinc-400 bg-black/60 truncate max-w-[220px]">
+                              {img.name}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {m.docs && m.docs.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2.5">
+                      {m.docs.map((doc, docIdx) => {
+                        const colors = getDocBadgeColor(doc.extension);
+                        return (
+                          <div
+                            key={doc.id || docIdx}
+                            className={cn(
+                              "rounded-lg border p-2 bg-black/50 flex items-center gap-2.5 max-w-[280px] shadow-sm select-none",
+                              colors.border
+                            )}
+                          >
+                            <div className={cn("px-1.5 py-0.5 rounded text-[9px] font-mono font-bold uppercase shrink-0", colors.bg, colors.text)}>
+                              {doc.extension}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="font-mono text-[11px] text-zinc-200 truncate font-medium" title={doc.name}>
+                                {doc.name}
+                              </div>
+                              <div className="text-[10px] text-zinc-400">
+                                {doc.isPdf ? "PDF Document" : `${doc.lineCount || 1} lines`} · {doc.sizeFormatted}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {m.text && (
+                    <AiMarkdownView
+                      content={m.text}
+                      isStreaming={false}
+                      onOpenFile={handleOpenFile}
+                    />
+                  )}
                 </div>
-              </div>
+              </motion.div>
             );
           }
 
           return (
-            <div key={idx} className="space-y-2 select-text">
-              {/* Thought reasoning accordion */}
-              {m.thoughtDuration && (
-                <ThoughtAccordion
-                  duration={m.thoughtDuration}
-                  thoughts={m.thoughts}
-                />
-              )}
-
+            <motion.div
+              key={m.id || `asst-${idx}`}
+              initial={{ opacity: 0, y: 6 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="space-y-2 select-text my-2"
+            >
               {/* Assistant Message with Sparkle icon */}
               <div className="flex items-start gap-2.5">
                 <AiSparkBadge />
                 <div className="flex-1 min-w-0 pt-0.5 space-y-2">
-                  {/* Antigravity Inline Activity Stream (Sub rollable box inside chat response) */}
+                  {/* Antigravity Inline Activity Stream */}
                   {((m.actionStreamItems && m.actionStreamItems.length > 0) ||
                     (m.toolCallCards && m.toolCallCards.length > 0) ||
-                    (m.isStreaming && thinkingStep)) && (
-                    <AntigravityActionStream
-                      items={
-                        m.actionStreamItems && m.actionStreamItems.length > 0
-                          ? m.actionStreamItems
-                          : toolCardsToActionStream(m.toolCallCards || [])
-                      }
-                      activeStep={m.isStreaming ? thinkingStep : undefined}
-                      isStreaming={m.isStreaming}
-                      onOpenFile={handleOpenFile}
-                      onViewAllChanges={() => {
-                        if (activeDiffs && activeDiffs.length > 0) {
-                          setDiffModalOpen(true);
-                        } else {
-                          const files =
-                            m.actionStreamItems
-                              ?.filter((it) => it.type === "edited")
-                              .map((it) => (it as any).filePath) || [];
-                          if (files.length > 0) {
-                            handleOpenFile(files[0]!);
-                          }
+                    (m.isStreaming && thinkingStep && !m.text) ||
+                    m.thoughtDuration) && (
+                      <AntigravityActionStream
+                        items={
+                          m.actionStreamItems && m.actionStreamItems.length > 0
+                            ? m.actionStreamItems
+                            : toolCardsToActionStream(m.toolCallCards || [])
                         }
-                      }}
-                      totalUniqueFilesCount={
-                        activeDiffs && activeDiffs.length > 0
-                          ? activeDiffs.length
-                          : m.actionStreamItems?.filter((it) => it.type === "edited").length
-                      }
-                    />
-                  )}
+                        activeStep={m.isStreaming && !m.text ? thinkingStep : undefined}
+                        duration={m.thoughtDuration || (m.isStreaming ? "Working..." : undefined)}
+                        thoughts={m.thoughts}
+                        isStreaming={m.isStreaming}
+                        onOpenFile={handleOpenFile}
+                        onViewAllChanges={() => {
+                          if (activeDiffs && activeDiffs.length > 0 && activeDiffs[0]) {
+                            handleOpenFileDiff(activeDiffs[0]);
+                          } else {
+                            const files =
+                              m.actionStreamItems
+                                ?.filter((it) => it.type === "edited")
+                                .map((it) => (it as any).filePath) || [];
+                            if (files.length > 0) {
+                              handleOpenFile(files[0]!);
+                            }
+                          }
+                        }}
+                        totalUniqueFilesCount={
+                          activeDiffs && activeDiffs.length > 0
+                            ? activeDiffs.length
+                            : m.actionStreamItems?.filter((it) => it.type === "edited").length
+                        }
+                      />
+                    )}
 
                   {m.text ? (
                     <AiMarkdownView
@@ -1850,41 +2475,30 @@ export function AiSidecar({
                     />
                   ) : null}
 
-                  {/* Autonomous Multi-Agent Task Graph (DAG) (§1 & §6) */}
-                  {m.taskGraphSteps && m.taskGraphSteps.length > 0 && (
-                    <TaskGraphDAGViewer steps={m.taskGraphSteps} />
-                  )}
-
-                  {/* Plan Card if present (legacy) */}
-                  {m.planItems && m.planItems.length > 0 && !m.taskGraphSteps && (
-                    <PlanCard items={m.planItems} />
-                  )}
-
-                  {/* Tool Execution Row if present */}
-                  {m.toolQuery && (!m.toolCallCards || m.toolCallCards.length === 0) && (
-                    <ToolExecutionRow
-                      query={m.toolQuery}
-                      count={m.toolResults || "12 results"}
+                  {/* Per-File Diff Card against each file in AI side bar */}
+                  {activeDiffs && activeDiffs.length > 0 ? (
+                    <SidebarDiffReviewCard
+                      files={activeDiffs}
+                      onOpenFileDiff={handleOpenFileDiff}
+                      onAcceptFile={handleAcceptDiff}
+                      onRejectFile={handleRejectDiff}
+                      onAcceptAll={handleAcceptAllDiffs}
+                      onRejectAll={handleRejectAllDiffs}
                     />
-                  )}
-
-                  {/* Edited Files Card if present */}
-                  {m.editedFiles && m.editedFiles.length > 0 && (
+                  ) : m.editedFiles && m.editedFiles.length > 0 ? (
                     <EditedFilesCard
                       files={m.editedFiles}
                       onOpenFile={handleOpenFile}
                       onViewDiff={() => {
-                        if (activeDiffs && activeDiffs.length > 0) {
-                          setDiffModalOpen(true);
-                        } else if (editorApi) {
-                          editorApi.openFile(m.editedFiles?.[0]?.name || "auth.ts");
+                        if (m.editedFiles && m.editedFiles[0]) {
+                          handleOpenFile(m.editedFiles[0].name);
                         }
                       }}
                     />
-                  )}
+                  ) : null}
                 </div>
               </div>
-            </div>
+            </motion.div>
           );
         })}
 
@@ -1896,33 +2510,43 @@ export function AiSidecar({
           />
         )}
 
-        {loading && (
-          <div className="flex items-center gap-2 py-1 text-[12px] text-[#888888] font-sans">
-            <span className="h-2 w-2 rounded-full bg-[#0084FF] animate-ping shrink-0" />
-            <span className="text-[#AAAAAA] animate-pulse">
+        {/* Fallback bottom loader (only shown when no assistant message is actively streaming) */}
+        {loading && !activeSession?.messages.some((m) => m.role === "assistant" && m.isStreaming) && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+            className="flex items-center gap-2 py-1 text-[12px] font-sans"
+          >
+            <span className="relative flex h-2.5 w-2.5 items-center justify-center shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-60" />
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cyan-400 thinking-dot-glow" />
+            </span>
+            <span className="thinking-text-shimmer text-[12px] truncate">
               {thinkingStep || "Thinking..."}
             </span>
-          </div>
+          </motion.div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
       {/* ── 4. Bottom Context Pills ── */}
-      <div className="px-3 py-1.5 bg-[#181818] border-t border-[#262626] flex items-center gap-1.5 overflow-x-auto scrollbar-none select-none">
+      <div className="px-3 py-1.5 bg-[#0e0f12] border-t border-white/[0.06] flex items-center gap-1.5 overflow-x-auto scrollbar-none select-none">
         {contextPills.map((pill, idx) => (
           <div
             key={idx}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[#222226] border border-[#303036] text-[11px] font-mono text-[#D0D0D8] shrink-0 hover:border-[#44444C] transition-colors"
+            className="flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-white/[0.04] border border-white/[0.06] text-[11px] font-mono text-zinc-300 shrink-0 hover:border-white/[0.12] transition-colors"
           >
             <span
               onClick={() => handleOpenFile(pill)}
-              className="cursor-pointer hover:underline text-[#38BDF8]"
+              className="cursor-pointer hover:underline text-sky-400"
             >
               @{pill}
             </span>
             <button
               onClick={() => handleRemoveContext(idx)}
-              className="text-[#7E7E8A] hover:text-white transition-colors cursor-pointer"
+              className="text-zinc-500 hover:text-white transition-colors cursor-pointer"
             >
               ×
             </button>
@@ -1931,76 +2555,187 @@ export function AiSidecar({
 
         <button
           onClick={handleAddContext}
-          className="flex items-center gap-1 px-2 py-0.5 rounded-[4px] border border-dashed border-[#3A3A42] hover:border-[#555562] text-[11px] text-[#8E8E98] hover:text-white transition-colors cursor-pointer shrink-0"
+          className="flex items-center gap-1 px-2 py-0.5 rounded-[4px] border border-dashed border-white/[0.08] hover:border-white/[0.16] text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer shrink-0"
         >
           <Plus className="h-3 w-3" />
           <span>Add context</span>
         </button>
       </div>
 
-      {/* ── 5. Input Container matching Filesystem Sidebar Colors ── */}
-      <div className="p-3 bg-[#181818] border-t border-[#262626]">
-        <div className="rounded-[8px] bg-[#1E1E22] border border-[#2E2E36] focus-within:border-[#007ACC] transition-all p-3 shadow-md">
+      {/* ── Sticky Per-File Diff Review Section in AI Sidebar ── */}
+      {activeDiffs && activeDiffs.length > 0 && (
+        <div className="px-3 pt-2 pb-1 bg-[#101114] border-t border-white/[0.06]">
+          <SidebarDiffReviewCard
+            files={activeDiffs}
+            onOpenFileDiff={handleOpenFileDiff}
+            onAcceptFile={handleAcceptDiff}
+            onRejectFile={handleRejectDiff}
+            onAcceptAll={handleAcceptAllDiffs}
+            onRejectAll={handleRejectAllDiffs}
+            compact={true}
+          />
+        </div>
+      )}
+
+      {/* ── 5. Input Container (Antigravity Minimalism) ── */}
+      <div className="p-3 bg-[#0e0f12] border-t border-white/[0.06]">
+        {/* Hidden File Input for images */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          onChange={handleFileSelect}
+          accept="image/*"
+          multiple
+          className="hidden"
+        />
+
+        {/* Hidden File Input for documents & code */}
+        <input
+          type="file"
+          ref={docInputRef}
+          onChange={handleDocSelect}
+          accept=".pdf,.txt,.md,.markdown,.json,.csv,.ts,.tsx,.js,.jsx,.py,.html,.css,.scss,.yaml,.yml,.toml,.xml,.sh,.bash,.sql,.env,.log,.rs,.go,.java,.c,.cpp,.h"
+          multiple
+          className="hidden"
+        />
+
+        <div
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+          className={cn(
+            "rounded-xl bg-[#141518] border transition-all p-3 shadow-sm",
+            isDraggingOver
+              ? "border-sky-500/60 ring-2 ring-sky-500/20 bg-[#161820]"
+              : "border-white/[0.08] focus-within:border-white/[0.18] focus-within:ring-1 focus-within:ring-white/[0.06]"
+          )}
+        >
+          {/* Attached Files & Documents Thumbnail / Badge Preview Strip */}
+          {(attachedImages.length > 0 || attachedDocs.length > 0) && (
+            <div className="flex flex-wrap gap-2 pb-2 mb-2 border-b border-white/[0.06]">
+              {attachedImages.map((img) => (
+                <div
+                  key={img.id}
+                  className="relative group rounded-md overflow-hidden border border-white/[0.1] bg-black/50 flex items-center gap-1.5 pr-2 pl-1 py-1 text-[11px] text-zinc-300"
+                >
+                  <img
+                    src={img.data}
+                    alt={img.name}
+                    className="h-7 w-7 object-cover rounded shadow-inner"
+                  />
+                  <span className="truncate max-w-[110px] font-mono text-[10.5px]">{img.name}</span>
+                  <button
+                    type="button"
+                    onClick={() => handleRemoveImage(img.id)}
+                    className="text-zinc-400 hover:text-white p-0.5 rounded hover:bg-white/10 transition-colors ml-0.5 cursor-pointer"
+                    title="Remove image"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+
+              {attachedDocs.map((doc) => {
+                const colors = getDocBadgeColor(doc.extension);
+                return (
+                  <div
+                    key={doc.id}
+                    className={cn(
+                      "relative group rounded-md border bg-black/60 flex items-center gap-1.5 pr-2 pl-2 py-1 text-[11px] text-[#D0D0D5]",
+                      colors.border
+                    )}
+                  >
+                    <span className={cn("px-1 py-0.5 rounded text-[9px] font-mono font-bold uppercase", colors.bg, colors.text)}>
+                      {doc.extension}
+                    </span>
+                    <span className="truncate max-w-[120px] font-mono text-[10.5px]" title={doc.name}>
+                      {doc.name}
+                    </span>
+                    <span className="text-[9.5px] text-zinc-500 font-mono">({doc.sizeFormatted})</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveDoc(doc.id)}
+                      className="text-zinc-400 hover:text-white p-0.5 rounded hover:bg-white/10 transition-colors ml-0.5 cursor-pointer"
+                      title="Remove document"
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <textarea
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Ask anything, or @ mention a file..."
+            onPaste={handlePaste}
+            placeholder={
+              attachedImages.length > 0 || attachedDocs.length > 0
+                ? "Describe what you want the AI to do with the attached file(s)..."
+                : "Ask anything, attach code/docs/images, paste screenshot (Cmd+V)..."
+            }
             rows={2}
-            className="w-full bg-transparent text-[13px] text-[#E5E5EB] placeholder:text-[#6A6A76] outline-none resize-none font-sans min-h-[42px] max-h-[140px] leading-relaxed"
+            className="w-full bg-transparent text-[13px] text-zinc-200 placeholder:text-zinc-500 outline-none resize-none font-sans min-h-[42px] max-h-[140px] leading-relaxed"
           />
 
           {/* Bottom Toolbar inside Input Card */}
-          <div className="flex items-center justify-between pt-2 border-t border-[#282830] mt-1 gap-2">
-            {/* Left Controls: Model Pill | Pencil | Attach */}
-            <div className="flex items-center gap-1.5 text-[11px] text-[#8E8E98] select-none min-w-0 overflow-hidden">
+          <div className="flex items-center justify-between pt-2 border-t border-white/[0.06] mt-1 gap-2">
+            {/* Left Controls: Model Pill | Pencil | Image | Attach */}
+            <div className="flex items-center gap-1.5 text-[11px] text-zinc-400 select-none min-w-0">
               {/* Model Selector Pill */}
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setModelMenuOpen((p) => !p)}
-                  className="flex items-center gap-1 px-2 py-0.5 rounded-[4px] bg-[#26262C] hover:bg-[#2F2F36] hover:text-white text-[#C0C0C8] border border-[#363640] cursor-pointer transition-colors text-[11px] max-w-[120px]"
+                  className={cn(
+                    "flex items-center gap-1.5 px-2.5 py-1 rounded-[6px] transition-all cursor-pointer text-[11px] font-sans font-medium select-none shrink-0",
+                    modelMenuOpen
+                      ? "bg-white/[0.08] text-white border border-white/[0.16] shadow-sm"
+                      : "bg-white/[0.04] hover:bg-white/[0.07] text-zinc-300 hover:text-white border border-white/[0.06]"
+                  )}
+                  title="Select AI Model, Local Ollama, or API Integration"
                 >
-                  <span className="truncate">{selectedModel}</span>
-                  <ChevronDown className="h-3 w-3 opacity-70" />
+                  <span className="truncate max-w-[135px]">{selectedModel}</span>
+                  {modelMenuOpen ? (
+                    <ChevronUp className="h-3 w-3 opacity-90 text-sky-400" />
+                  ) : (
+                    <ChevronDown className="h-3 w-3 opacity-70" />
+                  )}
                 </button>
 
-                {modelMenuOpen && (
-                  <div className="absolute bottom-7 left-0 z-50 min-w-[170px] rounded-md bg-[#222228] border border-[#343542] p-1 shadow-2xl text-[11px] text-[#D0D0D8]">
-                    {MODEL_OPTIONS.map((m) => (
-                      <div
-                        key={m}
-                        onClick={() => {
-                          setSelectedModel(m);
-                          setModelMenuOpen(false);
-                        }}
-                        className={cn(
-                          "px-2 py-1.5 rounded hover:bg-[#007ACC] hover:text-white cursor-pointer transition-colors",
-                          selectedModel === m && "bg-[#007ACC]/20 text-[#38BDF8]"
-                        )}
-                      >
-                        {m}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <ModelSelectionPopover
+                  open={modelMenuOpen}
+                  onClose={() => setModelMenuOpen(false)}
+                  selectedModel={selectedModel}
+                  onSelectModel={(modelName) => {
+                    setSelectedModel(modelName);
+                    setModelMenuOpen(false);
+                  }}
+                  onOpenFullModal={() => {
+                    setModelMenuOpen(false);
+                    setAiConnectorOpen(true);
+                  }}
+                />
               </div>
 
-              {/* Edit instructions / pencil */}
-              <button
-                type="button"
-                className="p-1 hover:text-white rounded hover:bg-[#282830] transition-colors cursor-pointer text-[#888894]"
-                title="Edit instructions"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-
-              {/* Paperclip / attach */}
+              {/* Image upload button */}
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="p-1 hover:text-white rounded hover:bg-[#282830] transition-colors cursor-pointer text-[#888894]"
-                title="Attach file or screenshot"
+                className="p-1 hover:text-white rounded hover:bg-[#28221D] transition-colors cursor-pointer text-[#8E877F]"
+                title="Upload image or screenshot"
+              >
+                <ImageIcon className="h-3.5 w-3.5" />
+              </button>
+
+              {/* Paperclip / attach documents & code */}
+              <button
+                type="button"
+                onClick={() => docInputRef.current?.click()}
+                className="p-1 hover:text-white rounded hover:bg-[#28221D] transition-colors cursor-pointer text-[#8E877F]"
+                title="Attach documents (.pdf, .txt, .md, .json, .csv, code files)"
               >
                 <Paperclip className="h-3.5 w-3.5" />
               </button>
@@ -2020,11 +2755,11 @@ export function AiSidecar({
               <button
                 type="button"
                 onClick={() => handleSend()}
-                disabled={!input.trim()}
+                disabled={!input.trim() && attachedImages.length === 0 && attachedDocs.length === 0}
                 className={cn(
-                  "p-1.5 rounded-md transition-all cursor-pointer flex items-center justify-center",
-                  input.trim()
-                    ? "bg-[#007ACC] hover:bg-[#008BE0] text-white shadow-sm"
+                  "p-1.5 rounded-md transition-all cursor-pointer flex items-center justify-center shrink-0",
+                  input.trim() || attachedImages.length > 0 || attachedDocs.length > 0
+                    ? "bg-gradient-to-r from-[#FF6B00] to-[#EA580C] hover:from-[#FF7D1A] hover:to-[#F97316] text-white shadow-sm shadow-orange-500/25"
                     : "text-[#555562] cursor-not-allowed"
                 )}
                 title="Send (Enter)"
@@ -2035,41 +2770,6 @@ export function AiSidecar({
           </div>
         </div>
       </div>
-
-      {/* ── 6. Modals for Diff Viewer and Activity Feed (§6) ── */}
-      {diffModalOpen && activeDiffs && activeDiffs.length > 0 && (
-        <DiffViewerModal
-          files={activeDiffs}
-          onAccept={(path) => {
-            const accepted = activeDiffs.find((f) => f.filePath === path);
-            if (accepted && editorApi) {
-              editorApi.updateContent(path, accepted.modifiedContent);
-            }
-            setActiveDiffs((p) => {
-              const rem = (p || []).filter((f) => f.filePath !== path);
-              if (rem.length === 0) setDiffModalOpen(false);
-              return rem;
-            });
-          }}
-          onReject={(path) => {
-            setActiveDiffs((p) => {
-              const rem = (p || []).filter((f) => f.filePath !== path);
-              if (rem.length === 0) setDiffModalOpen(false);
-              return rem;
-            });
-          }}
-          onAcceptAll={() => {
-            if (editorApi && activeDiffs) {
-              for (const diff of activeDiffs) {
-                editorApi.updateContent(diff.filePath, diff.modifiedContent);
-              }
-            }
-            setActiveDiffs(null);
-            setDiffModalOpen(false);
-          }}
-          onClose={() => setDiffModalOpen(false)}
-        />
-      )}
 
       {activityFeedOpen && (
         <ActivityFeedModal
@@ -2098,6 +2798,16 @@ export function AiSidecar({
           }}
         />
       )}
+
+      {/* AI Connector & Local Model / API Key Modal */}
+      <AiConnectorModal
+        open={aiConnectorOpen}
+        onClose={() => setAiConnectorOpen(false)}
+        activeModel={selectedModel}
+        onSelectModel={(modelName) => {
+          setSelectedModel(modelName);
+        }}
+      />
 
     </aside>
   );

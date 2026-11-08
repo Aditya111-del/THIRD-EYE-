@@ -1,6 +1,12 @@
 export type AgentRole = 'autonomous' | 'editor' | 'terminal';
 
-export type UserIntent = 'greeting' | 'general_question' | 'direct_execution' | 'workspace_task';
+export type UserIntent =
+  | 'greeting'
+  | 'general_question'
+  | 'direct_execution'
+  | 'workspace_task'
+  | 'project_init'
+  | 'directory_awareness';
 
 export interface PlanStep {
   id: string;
@@ -35,13 +41,19 @@ export interface AgentEvent {
 export interface AgentContext {
   workspaceRoot: string;
   sessionId: string;
+  cwd?: string;
+  cwdTree?: string;
+  directoryTree?: string;
   activeFile?: { path: string; name: string; content?: string; language?: string } | null;
   openTabs?: Array<{ path: string; name: string; isDirty?: boolean }>;
   terminalTail?: string;
-  history: Array<{ role: 'user' | 'assistant' | 'system' | 'tool'; content: string; name?: string; toolCallId?: string }>;
+  history: Array<{ role: 'user' | 'assistant' | 'system' | 'tool'; content: string; name?: string; toolCallId?: string; images?: any[] }>;
   agentMode?: AgentRole;
   model?: string;
   apiKey?: string;
+  baseUrl?: string;
+  provider?: string;
+  images?: Array<string | { data: string; mimeType?: string; name?: string; url?: string }>;
 }
 
 export interface AgentResult {

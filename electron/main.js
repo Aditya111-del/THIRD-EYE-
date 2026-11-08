@@ -22,8 +22,50 @@ function resolveExistingPath(p) {
 }
 
 let workspaceRoot = '';
+const ideRoot = path.resolve(__dirname, '..');
+
+function getSavedWorkspaceRoot() {
+  try {
+    const configPath = path.join(app.getPath('userData'), 'workspace_state.json');
+    if (fs.existsSync(configPath)) {
+      const data = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+      if (data?.lastWorkspaceRoot && fs.existsSync(data.lastWorkspaceRoot) && data.lastWorkspaceRoot !== ideRoot) {
+        return data.lastWorkspaceRoot;
+      }
+    }
+  } catch {}
+  return '';
+}
+
+function saveWorkspaceRoot(root) {
+  try {
+    const configPath = path.join(app.getPath('userData'), 'workspace_state.json');
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ lastWorkspaceRoot: root || '' }, null, 2), 'utf8');
+  } catch {}
+}
+
 const ptyManager = new PTYManager();
 const aiEngine = new AIEngine({ maxBufferLines: 300, errorCooldownMs: 4000 });
+
+ptyManager.setOnCwdChanged((id, newCwd) => {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('terminal.cwdChanged', { id, cwd: newCwd });
+    if (newCwd && fs.existsSync(newCwd) && newCwd !== ideRoot && newCwd !== os.homedir()) {
+      if (workspaceRoot !== newCwd) {
+        workspaceRoot = newCwd;
+        saveWorkspaceRoot(workspaceRoot);
+        console.log(`[Electron] Auto-synced workspaceRoot to terminal cwd: ${workspaceRoot}`);
+        setupFsWatcher(workspaceRoot);
+        mainWindow.webContents.send('workspace.rootChanged', {
+          root: workspaceRoot,
+          name: path.basename(workspaceRoot),
+        });
+        broadcastGitStatusChanged();
+      }
+    }
+  }
+});
 
 // Determine environment
 const isDev = !app.isPackaged && process.env.NODE_ENV !== 'production';
@@ -267,7 +309,7 @@ function handlePtyExit(id, { exitCode, signal }) {
 // Spawn new terminal process
 ipcMain.handle('terminal.spawn', async (_event, config = {}) => {
   try {
-    const targetCwd = config.cwd && fs.existsSync(config.cwd)
+    const targetCwd = (config.cwd && config.cwd !== '~' && fs.existsSync(config.cwd))
       ? config.cwd
       : (workspaceRoot && fs.existsSync(workspaceRoot) ? workspaceRoot : os.homedir());
     const spawnConfig = {
@@ -311,6 +353,11 @@ ipcMain.handle('terminal.list', async () => {
 // Retrieve live terminal output buffer
 ipcMain.handle('terminal.getBuffer', async (_event, { id } = {}) => {
   return ptyManager.getBuffer(id);
+});
+
+// Retrieve live working directory of a terminal session
+ipcMain.handle('terminal.getCwd', async (_event, { id } = {}) => {
+  return ptyManager.getCwd(id);
 });
 
 /* ==========================================================================
@@ -468,6 +515,7 @@ ipcMain.handle('dialog.openFolder', async () => {
     return { success: false, canceled: true };
   }
   workspaceRoot = result.filePaths[0];
+  saveWorkspaceRoot(workspaceRoot);
   console.log(`[Electron] Workspace root changed to: ${workspaceRoot}`);
   setupFsWatcher(workspaceRoot);
   ptyManager.cdAllSessions(workspaceRoot);
@@ -486,6 +534,7 @@ ipcMain.handle('workspace.openPath', async (_event, targetPath) => {
   const cleanTarget = resolveExistingPath(targetPath);
   if (!cleanTarget || !fs.existsSync(cleanTarget)) return { success: false, error: 'Path not found' };
   workspaceRoot = cleanTarget;
+  saveWorkspaceRoot(workspaceRoot);
   console.log(`[Electron] Workspace root explicitly set to: ${workspaceRoot}`);
   setupFsWatcher(workspaceRoot);
   ptyManager.cdAllSessions(workspaceRoot);
@@ -499,27 +548,13 @@ ipcMain.handle('workspace.openPath', async (_event, targetPath) => {
   return { success: true, folderPath: workspaceRoot, folderName: path.basename(workspaceRoot) };
 });
 
-// Explicitly reset workspace to default root (THIRD_EYE project folder)
+// Explicitly reset workspace to clean default state (never expose THIRD_EYE IDE codebase)
 ipcMain.handle('workspace.resetToDefault', async () => {
-  const defaultTarget = path.resolve(__dirname, '..');
-  workspaceRoot = defaultTarget;
-  console.log(`[Electron] Workspace root reset to default: ${workspaceRoot}`);
-  setupFsWatcher(workspaceRoot);
-  ptyManager.cdAllSessions(workspaceRoot);
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('workspace.rootChanged', {
-      root: workspaceRoot,
-      name: path.basename(workspaceRoot),
-    });
-  }
-  broadcastGitStatusChanged();
-  return { success: true, folderPath: workspaceRoot, folderName: path.basename(workspaceRoot) };
-});
-
-// Explicitly close workspace (empty workspaceRoot)
-ipcMain.handle('workspace.close', async () => {
   workspaceRoot = '';
-  console.log(`[Electron] Workspace root closed (empty)`);
+  saveWorkspaceRoot('');
+  console.log(`[Electron] Workspace root reset to empty clean state`);
+  setupFsWatcher('');
+  ptyManager.cdAllSessions(os.homedir());
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.webContents.send('workspace.rootChanged', {
       root: '',
@@ -530,9 +565,52 @@ ipcMain.handle('workspace.close', async () => {
   return { success: true, folderPath: '', folderName: '' };
 });
 
+// Explicitly close workspace (empty workspaceRoot)
+ipcMain.handle('workspace.close', async () => {
+  workspaceRoot = '';
+  saveWorkspaceRoot('');
+  console.log(`[Electron] Workspace root closed (empty)`);
+  ptyManager.cdAllSessions(os.homedir());
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('workspace.rootChanged', {
+      root: '',
+      name: '',
+    });
+  }
+  broadcastGitStatusChanged();
+  return { success: true, folderPath: '', folderName: '' };
+});
+
+// Initialize and switch to a new project folder without opening native file dialog
+ipcMain.handle('workspace.createAndOpenFolder', async (_event, { folderName, parentPath } = {}) => {
+  const cleanName = (folderName || `project-${Date.now()}`).trim().replace(/[^a-zA-Z0-9_\-\.]/g, '-');
+  const baseDir = parentPath ? resolveExistingPath(parentPath) : path.join(os.homedir(), 'Projects');
+  const targetDir = path.join(baseDir, cleanName);
+
+  try {
+    fs.mkdirSync(targetDir, { recursive: true });
+    workspaceRoot = targetDir;
+    saveWorkspaceRoot(workspaceRoot);
+    console.log(`[Electron] Initialized new project folder and set workspace root to: ${workspaceRoot}`);
+    setupFsWatcher(workspaceRoot);
+    ptyManager.cdAllSessions(workspaceRoot);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('workspace.rootChanged', {
+        root: workspaceRoot,
+        name: path.basename(workspaceRoot),
+      });
+    }
+    broadcastGitStatusChanged();
+    return { success: true, folderPath: workspaceRoot, folderName: path.basename(workspaceRoot) };
+  } catch (err) {
+    console.error('[Electron] Failed to create project folder:', err);
+    return { success: false, error: err.message };
+  }
+});
+
 // Explicitly direct terminal session(s) to a folder
 ipcMain.handle('terminal.cd', async (_event, { id, dir } = {}) => {
-  const target = resolveExistingPath(dir) || workspaceRoot;
+  const target = (dir === '~' || !dir) ? os.homedir() : (resolveExistingPath(dir) || workspaceRoot || os.homedir());
   if (id) {
     return { success: ptyManager.cdSession(id, target) };
   } else {
@@ -882,8 +960,52 @@ function broadcastGitStatusChanged() {
   }
 }
 
-function execGitCmd(cmd, cwd = workspaceRoot, token = null) {
+function resolveGitWorkingDir(explicitCwd) {
+  // 1. Explicit directory passed by caller
+  if (explicitCwd && typeof explicitCwd === 'string') {
+    const clean = resolveExistingPath(explicitCwd);
+    if (clean && fs.existsSync(clean) && clean !== ideRoot) {
+      return clean;
+    }
+  }
+
+  // 2. Electron's current active workspaceRoot (if not THIRD_EYE IDE root)
+  if (workspaceRoot && typeof workspaceRoot === 'string') {
+    const clean = resolveExistingPath(workspaceRoot);
+    if (clean && fs.existsSync(clean) && clean !== ideRoot) {
+      return clean;
+    }
+  }
+
+  // 3. Active terminal session's working directory
+  try {
+    const sessions = ptyManager.getSessions() || [];
+    for (const s of sessions) {
+      if (s.cwd && typeof s.cwd === 'string') {
+        const clean = resolveExistingPath(s.cwd);
+        if (clean && fs.existsSync(clean) && clean !== ideRoot && clean !== os.homedir()) {
+          return clean;
+        }
+      }
+    }
+  } catch (_) {}
+
+  // Safe default: return null so we NEVER inspect or mutate THIRD_EYE IDE source repository
+  return null;
+}
+
+function execGitCmd(cmd, cwd = null, token = null) {
   const { exec } = require('child_process');
+  const targetDir = resolveGitWorkingDir(cwd);
+  if (!targetDir) {
+    return Promise.resolve({
+      success: false,
+      error: 'No active project workspace folder',
+      stdout: '',
+      stderr: 'No active project workspace folder',
+    });
+  }
+
   let finalCmd = cmd;
   if (token) {
     const authHeader = `AUTHORIZATION: basic ${Buffer.from('x-access-token:' + token).toString('base64')}`;
@@ -892,7 +1014,7 @@ function execGitCmd(cmd, cwd = workspaceRoot, token = null) {
     finalCmd = `git ${finalCmd}`;
   }
   return new Promise((resolve) => {
-    exec(finalCmd, { cwd: cwd || workspaceRoot, maxBuffer: 15 * 1024 * 1024 }, (err, stdout, stderr) => {
+    exec(finalCmd, { cwd: targetDir, maxBuffer: 15 * 1024 * 1024 }, (err, stdout, stderr) => {
       if (err) {
         return resolve({ success: false, error: (stderr || err.message || '').trim(), stdout: (stdout || '').trim() });
       }
@@ -907,9 +1029,32 @@ function parseGitHubRepoName(url) {
   return match ? `${match[1]}/${match[2]}` : '';
 }
 
-ipcMain.handle('git.status', async () => {
+ipcMain.handle('git.status', async (_event, options = {}) => {
+  const reqCwd = (options && typeof options === 'object') ? options.cwd : (typeof options === 'string' ? options : null);
+  const targetDir = resolveGitWorkingDir(reqCwd);
+
+  if (!targetDir) {
+    return {
+      success: true,
+      isRepo: false,
+      branch: '',
+      remoteUrl: '',
+      repoName: '',
+      upstream: '',
+      ahead: 0,
+      behind: 0,
+      outgoingCommits: [],
+      recentCommits: [],
+      files: [],
+      stagedFiles: [],
+      unstagedFiles: [],
+      count: 0,
+      targetDir: '',
+    };
+  }
+
   try {
-    const checkRepo = await execGitCmd('rev-parse --is-inside-work-tree');
+    const checkRepo = await execGitCmd('rev-parse --is-inside-work-tree', targetDir);
     if (!checkRepo.success) {
       return {
         success: true,
@@ -926,14 +1071,15 @@ ipcMain.handle('git.status', async () => {
         stagedFiles: [],
         unstagedFiles: [],
         count: 0,
+        targetDir,
       };
     }
 
     const [statusRes, branchRes, remoteRes, upstreamRes] = await Promise.all([
-      execGitCmd('status --porcelain'),
-      execGitCmd('rev-parse --abbrev-ref HEAD'),
-      execGitCmd('remote get-url origin'),
-      execGitCmd('rev-parse --abbrev-ref --symbolic-full-name @{u}'),
+      execGitCmd('status --porcelain', targetDir),
+      execGitCmd('rev-parse --abbrev-ref HEAD', targetDir),
+      execGitCmd('remote get-url origin', targetDir),
+      execGitCmd('rev-parse --abbrev-ref --symbolic-full-name @{u}', targetDir),
     ]);
 
     const branch = branchRes.success && branchRes.stdout !== 'HEAD' ? branchRes.stdout : 'main';
@@ -947,14 +1093,14 @@ ipcMain.handle('git.status', async () => {
     let recentCommits = [];
 
     if (upstream) {
-      const countsRes = await execGitCmd(`rev-list --left-right --count ${upstream}...HEAD`);
+      const countsRes = await execGitCmd(`rev-list --left-right --count ${upstream}...HEAD`, targetDir);
       if (countsRes.success && countsRes.stdout) {
         const parts = countsRes.stdout.split(/\s+/).map((n) => parseInt(n, 10) || 0);
         behind = parts[0] || 0;
         ahead = parts[1] || 0;
       }
       if (ahead > 0) {
-        const outLog = await execGitCmd(`log ${upstream}..HEAD --pretty=format:"%h%x09%an%x09%ar%x09%s" -n 20`);
+        const outLog = await execGitCmd(`log ${upstream}..HEAD --pretty=format:"%h%x09%an%x09%ar%x09%s" -n 20`, targetDir);
         if (outLog.success && outLog.stdout) {
           outgoingCommits = outLog.stdout.split('\n').filter(Boolean).map((line) => {
             const [hash, author, date, message] = line.split('\t');
@@ -964,16 +1110,16 @@ ipcMain.handle('git.status', async () => {
       }
     } else if (remoteUrl) {
       // Remote exists, check if origin/<branch> exists
-      const checkOriginBranch = await execGitCmd(`rev-parse --verify origin/${branch}`);
+      const checkOriginBranch = await execGitCmd(`rev-parse --verify origin/${branch}`, targetDir);
       if (checkOriginBranch.success) {
-        const countsRes = await execGitCmd(`rev-list --left-right --count origin/${branch}...HEAD`);
+        const countsRes = await execGitCmd(`rev-list --left-right --count origin/${branch}...HEAD`, targetDir);
         if (countsRes.success && countsRes.stdout) {
           const parts = countsRes.stdout.split(/\s+/).map((n) => parseInt(n, 10) || 0);
           behind = parts[0] || 0;
           ahead = parts[1] || 0;
         }
         if (ahead > 0) {
-          const outLog = await execGitCmd(`log origin/${branch}..HEAD --pretty=format:"%h%x09%an%x09%ar%x09%s" -n 20`);
+          const outLog = await execGitCmd(`log origin/${branch}..HEAD --pretty=format:"%h%x09%an%x09%ar%x09%s" -n 20`, targetDir);
           if (outLog.success && outLog.stdout) {
             outgoingCommits = outLog.stdout.split('\n').filter(Boolean).map((line) => {
               const [hash, author, date, message] = line.split('\t');
@@ -983,12 +1129,12 @@ ipcMain.handle('git.status', async () => {
         }
       } else {
         // Brand new branch not yet pushed to origin
-        const countRes = await execGitCmd('rev-list --count HEAD');
+        const countRes = await execGitCmd('rev-list --count HEAD', targetDir);
         if (countRes.success && countRes.stdout) {
           ahead = parseInt(countRes.stdout, 10) || 0;
         }
         if (ahead > 0) {
-          const outLog = await execGitCmd('log -n 20 --pretty=format:"%h%x09%an%x09%ar%x09%s"');
+          const outLog = await execGitCmd('log -n 20 --pretty=format:"%h%x09%an%x09%ar%x09%s"', targetDir);
           if (outLog.success && outLog.stdout) {
             outgoingCommits = outLog.stdout.split('\n').filter(Boolean).map((line) => {
               const [hash, author, date, message] = line.split('\t');
@@ -1000,7 +1146,7 @@ ipcMain.handle('git.status', async () => {
     }
 
     // Load recent commits (up to 10)
-    const recentLog = await execGitCmd('log -n 10 --pretty=format:"%h%x09%an%x09%ar%x09%s"');
+    const recentLog = await execGitCmd('log -n 10 --pretty=format:"%h%x09%an%x09%ar%x09%s"', targetDir);
     if (recentLog.success && recentLog.stdout) {
       recentCommits = recentLog.stdout.split('\n').filter(Boolean).map((line) => {
         const [hash, author, date, message] = line.split('\t');
@@ -1017,7 +1163,7 @@ ipcMain.handle('git.status', async () => {
       const x = l.substring(0, 1);
       const y = l.substring(1, 2);
       const relPath = l.substring(3).trim();
-      const fullPath = path.join(workspaceRoot, relPath);
+      const fullPath = path.join(targetDir, relPath);
       const isUntracked = x === '?' && y === '?';
       const isStaged = !isUntracked && x !== ' ' && x !== '?';
       const isUnstaged = !isUntracked && (y !== ' ' && y !== '?');
@@ -1051,6 +1197,7 @@ ipcMain.handle('git.status', async () => {
       stagedFiles,
       unstagedFiles,
       count: files.length,
+      targetDir,
     };
   } catch (err) {
     return {
@@ -1063,18 +1210,24 @@ ipcMain.handle('git.status', async () => {
       behind: 0,
       outgoingCommits: [],
       recentCommits: [],
+      targetDir: targetDir || '',
     };
   }
 });
 
-ipcMain.handle('git.init', async () => {
+ipcMain.handle('git.init', async (_event, options = {}) => {
   try {
-    const initRes = await execGitCmd('init', workspaceRoot);
+    const reqCwd = (options && typeof options === 'object') ? options.cwd : (typeof options === 'string' ? options : null);
+    const targetDir = resolveGitWorkingDir(reqCwd) || (workspaceRoot && workspaceRoot !== ideRoot ? workspaceRoot : null);
+    if (!targetDir || !fs.existsSync(targetDir) || targetDir === ideRoot) {
+      return { success: false, error: 'No active user project folder to initialize Git.' };
+    }
+    const initRes = await execGitCmd('init', targetDir);
     if (!initRes.success) return initRes;
-    await execGitCmd('branch -M main', workspaceRoot);
+    await execGitCmd('branch -M main', targetDir);
 
     // If no .gitignore exists, create a default one
-    const gitignorePath = path.join(workspaceRoot, '.gitignore');
+    const gitignorePath = path.join(targetDir, '.gitignore');
     if (!fs.existsSync(gitignorePath)) {
       const defaultGitignore = `node_modules/\n.output/\n.next/\n.vite/\ndist/\nbuild/\n.cache/\n.env\n.env.local\n.DS_Store\n`;
       fs.writeFileSync(gitignorePath, defaultGitignore, 'utf8');
@@ -1087,80 +1240,86 @@ ipcMain.handle('git.init', async () => {
   }
 });
 
-ipcMain.handle('git.stage', async (_event, filePath) => {
+ipcMain.handle('git.stage', async (_event, filePath, options = {}) => {
+  const reqCwd = (options && typeof options === 'object') ? options.cwd : (typeof options === 'string' ? options : null);
   const target = filePath ? `"${filePath}"` : '-A';
-  const res = await execGitCmd(`add ${target}`);
+  const res = await execGitCmd(`add ${target}`, reqCwd);
   broadcastGitStatusChanged();
   return res;
 });
 
-ipcMain.handle('git.unstage', async (_event, filePath) => {
+ipcMain.handle('git.unstage', async (_event, filePath, options = {}) => {
+  const reqCwd = (options && typeof options === 'object') ? options.cwd : (typeof options === 'string' ? options : null);
   const target = filePath ? `"${filePath}"` : '.';
-  const res = await execGitCmd(`restore --staged ${target}`);
+  const res = await execGitCmd(`restore --staged ${target}`, reqCwd);
   broadcastGitStatusChanged();
   return res;
 });
 
-ipcMain.handle('git.discard', async (_event, { filePath, isUntracked }) => {
+ipcMain.handle('git.discard', async (_event, { filePath, isUntracked, cwd } = {}) => {
   if (!filePath) return { success: false, error: 'Path required' };
   let res;
   if (isUntracked) {
-    res = await execGitCmd(`clean -f -d "${filePath}"`);
+    res = await execGitCmd(`clean -f -d "${filePath}"`, cwd);
   } else {
-    res = await execGitCmd(`restore "${filePath}"`);
+    res = await execGitCmd(`restore "${filePath}"`, cwd);
   }
   broadcastGitStatusChanged();
   return res;
 });
 
-ipcMain.handle('git.commit', async (_event, { message, stageAll = true }) => {
+ipcMain.handle('git.commit', async (_event, { message, stageAll = true, cwd } = {}) => {
   if (!message || !message.trim()) return { success: false, error: 'Commit message is required' };
   const safeMsg = message.trim().replace(/"/g, '\\"');
   if (stageAll) {
-    const addRes = await execGitCmd('add -A');
+    const addRes = await execGitCmd('add -A', cwd);
     if (!addRes.success) return addRes;
   }
-  const res = await execGitCmd(`commit -m "${safeMsg}"`);
+  const res = await execGitCmd(`commit -m "${safeMsg}"`, cwd);
   broadcastGitStatusChanged();
   return res;
 });
 
 ipcMain.handle('git.push', async (_event, options = {}) => {
-  const { branch, remote = 'origin', force = false, setUpstream = true, token } = options;
+  const { branch, remote = 'origin', force = false, setUpstream = true, token, cwd } = options;
+  const targetDir = resolveGitWorkingDir(cwd);
   let targetBranch = branch;
   if (!targetBranch) {
-    const branchRes = await execGitCmd('rev-parse --abbrev-ref HEAD');
+    const branchRes = await execGitCmd('rev-parse --abbrev-ref HEAD', targetDir);
     targetBranch = branchRes.success ? branchRes.stdout : 'main';
   }
   const cmd = `push ${setUpstream ? '-u ' : ''}${remote} ${targetBranch}${force ? ' --force' : ''}`;
-  const res = await execGitCmd(cmd, workspaceRoot, token);
+  const res = await execGitCmd(cmd, targetDir, token);
   broadcastGitStatusChanged();
   return res;
 });
 
 ipcMain.handle('git.pull', async (_event, options = {}) => {
-  const { remote = 'origin', branch, token } = options;
+  const { remote = 'origin', branch, token, cwd } = options;
+  const targetDir = resolveGitWorkingDir(cwd);
   const cmd = `pull --rebase ${remote} ${branch || ''}`.trim();
-  const res = await execGitCmd(cmd, workspaceRoot, token);
+  const res = await execGitCmd(cmd, targetDir, token);
   broadcastGitStatusChanged();
   return res;
 });
 
 ipcMain.handle('git.fetch', async (_event, options = {}) => {
-  const { remote = 'origin', token } = options;
-  const res = await execGitCmd(`fetch ${remote}`, workspaceRoot, token);
+  const { remote = 'origin', token, cwd } = options;
+  const targetDir = resolveGitWorkingDir(cwd);
+  const res = await execGitCmd(`fetch ${remote}`, targetDir, token);
   broadcastGitStatusChanged();
   return res;
 });
 
-ipcMain.handle('git.setRemote', async (_event, { url, remote = 'origin' }) => {
+ipcMain.handle('git.setRemote', async (_event, { url, remote = 'origin', cwd } = {}) => {
   if (!url) return { success: false, error: 'Remote URL is required' };
-  const checkRes = await execGitCmd(`remote get-url ${remote}`);
+  const targetDir = resolveGitWorkingDir(cwd);
+  const checkRes = await execGitCmd(`remote get-url ${remote}`, targetDir);
   let res;
   if (checkRes.success) {
-    res = await execGitCmd(`remote set-url ${remote} "${url}"`);
+    res = await execGitCmd(`remote set-url ${remote} "${url}"`, targetDir);
   } else {
-    res = await execGitCmd(`remote add ${remote} "${url}"`);
+    res = await execGitCmd(`remote add ${remote} "${url}"`, targetDir);
   }
   broadcastGitStatusChanged();
   return res;
@@ -1186,6 +1345,7 @@ ipcMain.handle('git.clone', async (_event, { url, targetDir, token }) => {
 
   // Auto-switch workspace root to newly cloned project
   workspaceRoot = dest;
+  saveWorkspaceRoot(workspaceRoot);
   setupFsWatcher(workspaceRoot);
   ptyManager.cdAllSessions(workspaceRoot);
   if (mainWindow) {
@@ -1277,6 +1437,7 @@ ipcMain.handle('github.fork', async (_event, { token, repoOwner, repoName, targe
 
     // Switch workspace to cloned fork
     workspaceRoot = dest;
+    saveWorkspaceRoot(workspaceRoot);
     setupFsWatcher(workspaceRoot);
     ptyManager.cdAllSessions(workspaceRoot);
     if (mainWindow) {
@@ -1621,10 +1782,15 @@ ipcMain.handle('agent.revertCheckpoint', async (_event, { checkpointId }) => {
   return { success: true, checkpointId };
 });
 
-ipcMain.handle('git.diff', async () => {
+ipcMain.handle('git.diff', async (_event, options = {}) => {
   const { exec } = require('child_process');
+  const reqCwd = (options && typeof options === 'object') ? options.cwd : (typeof options === 'string' ? options : null);
+  const targetDir = resolveGitWorkingDir(reqCwd);
+  if (!targetDir) {
+    return { diff: '', error: null };
+  }
   return new Promise((resolve) => {
-    exec('git diff', { cwd: workspaceRoot }, (err, stdout) => {
+    exec('git diff', { cwd: targetDir }, (err, stdout) => {
       resolve({ diff: stdout || '', error: err ? err.message : null });
     });
   });
@@ -1727,6 +1893,13 @@ ipcMain.handle('window.isMaximized', async () => {
    ========================================================================== */
 
 app.whenReady().then(() => {
+  const savedRoot = getSavedWorkspaceRoot();
+  if (savedRoot && !workspaceRoot) {
+    workspaceRoot = savedRoot;
+    console.log(`[Electron] Restored active workspaceRoot from previous session: ${workspaceRoot}`);
+    setupFsWatcher(workspaceRoot);
+  }
+
   createWindow();
 
   app.on('activate', () => {

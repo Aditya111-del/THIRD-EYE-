@@ -10,6 +10,7 @@ export interface ConversationTurn {
   toolCallId?: string;
   toolCalls?: any[];
   rawParts?: any[];
+  images?: any[];
 }
 
 export function compactConversationHistory(

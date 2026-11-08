@@ -28,6 +28,10 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
+# Runtime agent sessions & storage
+.third-eye/
+backend/ai-service/bin/
+
 # Editor & OS files
 .vscode/*
 !.vscode/extensions.json

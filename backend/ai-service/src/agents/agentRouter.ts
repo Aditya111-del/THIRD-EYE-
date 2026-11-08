@@ -35,6 +35,18 @@ export class AgentRouter {
     return this.autonomousAgent;
   }
 
+  public cancel(sessionId: string): void {
+    this.autonomousAgent.cancel(sessionId);
+    (this.editorAgent as any).cancel?.(sessionId);
+    (this.terminalAgent as any).cancel?.(sessionId);
+  }
+
+  public resetCancellation(sessionId: string): void {
+    this.autonomousAgent.resetCancellation(sessionId);
+    (this.editorAgent as any).resetCancellation?.(sessionId);
+    (this.terminalAgent as any).resetCancellation?.(sessionId);
+  }
+
   /**
    * Determine best agent role based on explicit preference or prompt heuristics
    */

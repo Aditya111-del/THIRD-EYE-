@@ -2290,10 +2290,14 @@ let skillManagerInstance = SkillManagerClass ? new SkillManagerClass(defaultWork
 
 let getActiveRunningTasksSummary = null;
 let executeStopServer = null;
+let executeListTasks = null;
+let executeKillTask = null;
 try {
   const termMod = require('./dist/tools/runTerminal');
   getActiveRunningTasksSummary = termMod.getActiveRunningTasksSummary;
   executeStopServer = termMod.executeStopServer;
+  executeListTasks = termMod.executeListTasks;
+  executeKillTask = termMod.executeKillTask;
 } catch (e) {}
 
 // Get active running tasks and ports
@@ -2302,6 +2306,32 @@ app.get('/api/ai/server/running-tasks', (req, res) => {
     return res.json({ success: true, summary: getActiveRunningTasksSummary() });
   }
   return res.json({ success: true, summary: 'No active background tasks or server processes running.' });
+});
+
+// List all active background tasks dynamically
+app.get('/api/ai/tasks', async (req, res) => {
+  try {
+    if (executeListTasks) {
+      const result = await executeListTasks();
+      return res.json({ success: true, ...result });
+    }
+    return res.json({ success: true, tasks: [], total: 0 });
+  } catch (err) {
+    return res.status(500).json({ error: err.message, tasks: [], total: 0 });
+  }
+});
+
+// Kill a background task
+app.post('/api/ai/tasks/kill', async (req, res) => {
+  try {
+    if (executeKillTask) {
+      const result = await executeKillTask(req.body);
+      return res.json({ success: true, ...result });
+    }
+    return res.status(500).json({ error: 'executeKillTask not initialized' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
 });
 
 // Explicit stop server endpoint

@@ -497,6 +497,8 @@ export function AiSidecar({
   const [loading, setLoading] = useState(false);
   const [thinkingStep, setThinkingStep] = useState<string>("");
   const [contextPills, setContextPills] = useState<string[]>([]);
+  const [runningTasks, setRunningTasks] = useState<Array<{ id: string; command: string; onKill?: () => void }>>([]);
+  const [tasksDockExpanded, setTasksDockExpanded] = useState<boolean>(true);
 
   // Autonomous Multi-Agent State (§6)
   const [activePermissionRequest, setActivePermissionRequest] = useState<PermissionRequestPayload | null>(null);
@@ -594,6 +596,49 @@ export function AiSidecar({
         }
       })
       .catch(() => { });
+  }, []);
+
+  // Dynamically synchronize active background tasks from backend
+  useEffect(() => {
+    let isMounted = true;
+    const syncTasks = async () => {
+      try {
+        const res = await fetch("http://localhost:4002/api/ai/tasks");
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!isMounted) return;
+        if (data.success && Array.isArray(data.tasks)) {
+          const activeOnly = data.tasks
+            .filter((t: { status?: string }) => t.status === "running")
+            .map((t: { taskId?: string; id?: string; command?: string }) => ({
+              id: t.taskId || t.id || `task-${Date.now()}`,
+              command: t.command || "background process",
+              onKill: async () => {
+                const targetId = t.taskId || t.id;
+                if (!targetId) return;
+                try {
+                  await fetch("http://localhost:4002/api/ai/tasks/kill", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ taskId: targetId }),
+                  });
+                  setRunningTasks((prev) => prev.filter((item) => item.id !== targetId));
+                } catch { }
+              },
+            }));
+          setRunningTasks(activeOnly);
+        }
+      } catch {
+        // Backend service offline or unreachable
+      }
+    };
+
+    syncTasks();
+    const interval = setInterval(syncTasks, 3000);
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
   }, []);
 
   // Multi-Agent Sessions
@@ -2574,6 +2619,54 @@ export function AiSidecar({
             onRejectAll={handleRejectAllDiffs}
             compact={true}
           />
+        </div>
+      )}
+
+      {/* ── 4b. Background Running Tasks Dock (Matching Antigravity Screenshots 1-5) ── */}
+      {runningTasks.length > 0 && (
+        <div className="mx-3 mb-1.5 rounded-lg bg-[#141518]/90 border border-white/[0.08] overflow-hidden text-[12px] select-none shadow-sm">
+          <button
+            type="button"
+            onClick={() => setTasksDockExpanded((p) => !p)}
+            className="w-full px-3 py-1.5 flex items-center justify-between text-zinc-300 hover:text-white cursor-pointer font-sans transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <span className="relative flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-60" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
+              </span>
+              <span className="font-medium text-[11.5px]">
+                {runningTasks.length} task{runningTasks.length === 1 ? "" : "s"} running
+              </span>
+            </div>
+            <ChevronDown
+              className={cn(
+                "w-3.5 h-3.5 text-zinc-500 transition-transform duration-200",
+                !tasksDockExpanded && "-rotate-90"
+              )}
+            />
+          </button>
+          {tasksDockExpanded && (
+            <div className="px-3 pb-2 pt-0.5 border-t border-white/[0.06] space-y-1 font-mono text-[11px] text-zinc-400">
+              {runningTasks.map((t) => (
+                <div key={t.id} className="flex items-center justify-between py-0.5">
+                  <div className="flex items-center gap-2 truncate">
+                    <span className="text-zinc-500 font-bold">&gt;-</span>
+                    <span className="truncate text-zinc-300">{t.command}</span>
+                  </div>
+                  {t.onKill && (
+                    <button
+                      type="button"
+                      onClick={() => t.onKill?.()}
+                      className="text-[10px] text-rose-400/80 hover:text-rose-300 font-sans px-1.5 py-0.5 rounded hover:bg-rose-500/10 transition-colors ml-2 shrink-0 cursor-pointer"
+                    >
+                      Stop
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

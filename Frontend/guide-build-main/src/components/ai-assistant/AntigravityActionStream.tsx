@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import React, { useState, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -21,14 +22,7 @@ import { cn } from "@/lib/utils";
 const EASING_CUBIC = [0.22, 1, 0.36, 1] as const;
 
 export type AntigravityFileState =
-  | "analyzing"
-  | "reading"
-  | "editing"
-  | "created"
-  | "modified"
-  | "deleted"
-  | "completed"
-  | "failed";
+  "analyzing" | "reading" | "editing" | "created" | "modified" | "deleted" | "completed" | "failed";
 
 export interface AntigravityFileItem {
   id: string;
@@ -134,6 +128,7 @@ export interface NormalizedActivity {
   fileType?: "js" | "ts" | "react" | "config" | "css" | "py" | "html" | "json" | "md" | "default";
   lineRange?: string | undefined;
   status: "running" | "completed" | "failed";
+  output?: string | undefined;
   addedCount?: number | undefined;
   removedCount?: number | undefined;
   resultCount?: number | undefined;
@@ -150,6 +145,53 @@ export function getFileTypeBadge(filePath: string): {
 } {
   const lower = (filePath || "").toLowerCase();
   const base = lower.split("/").pop() || "";
+
+  // Shell & batch scripts: >_ badge matching Antigravity Screenshot 1 & 5
+  if (
+    base.endsWith(".bat") ||
+    base.endsWith(".cmd") ||
+    base.endsWith(".sh") ||
+    base.endsWith(".bash") ||
+    base.endsWith(".zsh")
+  ) {
+    return {
+      type: "config",
+      badge: (
+        <span className="text-[10px] font-mono text-cyan-400 bg-cyan-400/10 px-1 py-0.5 rounded border border-cyan-400/20 font-bold shrink-0">
+          &gt;_
+        </span>
+      ),
+    };
+  }
+
+  // Git files: orange/red diamond matching Antigravity Screenshot 1 & 5
+  if (
+    base === ".gitignore" ||
+    base === ".gitattributes" ||
+    base === ".gitmodules" ||
+    base.startsWith(".git")
+  ) {
+    return {
+      type: "config",
+      badge: (
+        <span className="text-[10px] text-amber-500 shrink-0 inline-flex items-center">
+          <span className="h-2 w-2 rotate-45 bg-amber-500/90 rounded-[1px] inline-block" />
+        </span>
+      ),
+    };
+  }
+
+  // JSON files: {} badge
+  if (base.endsWith(".json")) {
+    return {
+      type: "json",
+      badge: (
+        <span className="text-[9.5px] font-mono text-amber-400 bg-amber-400/10 px-1 py-0.5 rounded border border-amber-400/20 font-bold shrink-0">
+          &#123;&#125;
+        </span>
+      ),
+    };
+  }
 
   if (base.endsWith(".tsx") || base.endsWith(".jsx")) {
     return {
@@ -342,6 +384,7 @@ function normalizeItem(item: AntigravityStreamItem): NormalizedActivity {
       label: isRunning ? "Running" : "Ran",
       target: item.command,
       status: item.status,
+      output: item.output,
       rawItem: item,
     };
   }
@@ -405,9 +448,7 @@ export function ActivityStatusIcon({
 
   // 2. Reading: Subtle blue dot
   if (state === "reading") {
-    return (
-      <span className="inline-flex rounded-full h-1.5 w-1.5 bg-sky-400/80 shrink-0" />
-    );
+    return <span className="inline-flex rounded-full h-1.5 w-1.5 bg-sky-400/80 shrink-0" />;
   }
 
   // 3. Editing: File icon + purple active indicator
@@ -431,51 +472,35 @@ export function ActivityStatusIcon({
 
   // 5. Modified: Small modified badge
   if (state === "modified") {
-    return (
-      <span className="text-amber-400 font-mono text-[10px] shrink-0 leading-none">
-        ●
-      </span>
-    );
+    return <span className="text-amber-400 font-mono text-[10px] shrink-0 leading-none">●</span>;
   }
 
   // 6. Deleted: Muted red deletion indicator
   if (state === "deleted") {
     return (
-      <span className="text-rose-400 font-mono text-[11px] font-bold shrink-0 leading-none">
-        −
-      </span>
+      <span className="text-rose-400 font-mono text-[11px] font-bold shrink-0 leading-none">−</span>
     );
   }
 
   // 7. Completed: Small checkmark
   if (state === "completed") {
-    return (
-      <Check className="w-3 h-3 text-emerald-400/90 shrink-0 stroke-[2.5]" />
-    );
+    return <Check className="w-3 h-3 text-emerald-400/90 shrink-0 stroke-[2.5]" />;
   }
 
   // 8. Failed: Subtle red error indicator
   if (state === "failed") {
-    return (
-      <X className="w-3 h-3 text-rose-400 shrink-0 stroke-[2.5]" />
-    );
+    return <X className="w-3 h-3 text-rose-400 shrink-0 stroke-[2.5]" />;
   }
 
   if (state === "searching") {
-    return (
-      <Search className="w-3 h-3 text-sky-400/90 shrink-0" />
-    );
+    return <Search className="w-3 h-3 text-sky-400/90 shrink-0" />;
   }
 
   if (state === "terminal") {
-    return (
-      <Terminal className="w-3 h-3 text-purple-400/90 shrink-0" />
-    );
+    return <Terminal className="w-3 h-3 text-purple-400/90 shrink-0" />;
   }
 
-  return (
-    <span className="inline-flex rounded-full h-1.5 w-1.5 bg-zinc-500 shrink-0" />
-  );
+  return <span className="inline-flex rounded-full h-1.5 w-1.5 bg-zinc-500 shrink-0" />;
 }
 
 export interface AntigravityActionStreamProps {
@@ -501,7 +526,20 @@ export function AntigravityActionStream({
 }: AntigravityActionStreamProps) {
   // Open by default so operations are visible live step-by-step matching Screenshot 2
   const [isExpanded, setIsExpanded] = useState<boolean>(true);
-  const [isTopExpanded, setIsTopExpanded] = useState<boolean>(true);
+  const [isTopExpanded, setIsTopExpanded] = useState<boolean>(isStreaming || !duration);
+  const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(new Set());
+
+  const toggleItemOutput = (id: string) => {
+    setExpandedItemIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
 
   // Normalize all items
   const normalized = useMemo(() => {
@@ -532,43 +570,41 @@ export function AntigravityActionStream({
   }, [normalized, isStreaming]);
 
   // Compute summary metrics
-  const { uniqueAnalyzed, uniqueModified, searchCount, commandCount } =
-    useMemo(() => {
-      const analyzedFiles = new Set<string>();
-      const modifiedFiles = new Set<string>();
-      let searches = 0;
-      let commands = 0;
+  const { uniqueAnalyzed, uniqueModified, searchCount, commandCount } = useMemo(() => {
+    const analyzedFiles = new Set<string>();
+    const modifiedFiles = new Set<string>();
+    let searches = 0;
+    let commands = 0;
 
-      for (const it of normalized) {
-        if (it.kind === "file") {
-          if (it.state === "analyzing" || it.state === "reading" || it.label.includes("Analyz")) {
-            if (it.target) analyzedFiles.add(it.target);
-          } else if (
-            it.state === "modified" ||
-            it.state === "editing" ||
-            it.state === "created" ||
-            it.state === "deleted"
-          ) {
-            if (it.target) modifiedFiles.add(it.target);
-          }
-        } else if (it.kind === "search") {
-          searches++;
-        } else if (it.kind === "terminal") {
-          commands++;
+    for (const it of normalized) {
+      if (it.kind === "file") {
+        if (it.state === "analyzing" || it.state === "reading" || it.label.includes("Analyz")) {
+          if (it.target) analyzedFiles.add(it.target);
+        } else if (
+          it.state === "modified" ||
+          it.state === "editing" ||
+          it.state === "created" ||
+          it.state === "deleted"
+        ) {
+          if (it.target) modifiedFiles.add(it.target);
         }
+      } else if (it.kind === "search") {
+        searches++;
+      } else if (it.kind === "terminal") {
+        commands++;
       }
+    }
 
-      return {
-        uniqueAnalyzed: analyzedFiles.size,
-        uniqueModified: modifiedFiles.size,
-        searchCount: searches,
-        commandCount: commands,
-      };
-    }, [normalized]);
+    return {
+      uniqueAnalyzed: analyzedFiles.size,
+      uniqueModified: modifiedFiles.size,
+      searchCount: searches,
+      commandCount: commands,
+    };
+  }, [normalized]);
 
   // Active step override if no active item but activeStep is passed
-  const displayActiveStep =
-    !activeItem && isStreaming && activeStep ? activeStep : null;
+  const displayActiveStep = !activeItem && isStreaming && activeStep ? activeStep : null;
 
   if (normalized.length === 0 && !displayActiveStep && !duration) {
     return null;
@@ -584,17 +620,36 @@ export function AntigravityActionStream({
     summaryParts.length > 0
       ? summaryParts.join(", ")
       : normalized.length > 0
-      ? `${normalized.length} operations`
-      : "Explored files";
+        ? `${normalized.length} operations`
+        : "Explored files";
+
+  let liveSubHeader = summaryLabel;
+  if (isStreaming) {
+    if (activeItem) {
+      if (activeItem.kind === "file") {
+        const isRead = activeItem.label.includes("Analyz") || activeItem.label.includes("Read");
+        liveSubHeader = `${isRead ? "Reading" : "Editing"} ${activeItem.fileName || activeItem.target}`;
+      } else if (activeItem.kind === "terminal") {
+        liveSubHeader = activeItem.target.startsWith("Running")
+          ? activeItem.target
+          : `Running ${activeItem.target}`;
+      } else {
+        liveSubHeader = `${activeItem.label} ${activeItem.target}`;
+      }
+    } else if (displayActiveStep) {
+      liveSubHeader = displayActiveStep;
+    }
+  }
 
   const changesCount = totalUniqueFilesCount ?? uniqueModified;
 
   // Header duration text
   let headerDurationText = "Worked for a few seconds";
   if (duration) {
-    headerDurationText = duration.toLowerCase().startsWith("worked") || duration.toLowerCase().startsWith("working")
-      ? duration
-      : `Worked for ${duration}`;
+    headerDurationText =
+      duration.toLowerCase().startsWith("worked") || duration.toLowerCase().startsWith("working")
+        ? duration
+        : `Worked for ${duration}`;
   } else if (isStreaming) {
     headerDurationText = "Working...";
   }
@@ -613,7 +668,7 @@ export function AntigravityActionStream({
         <ChevronDown
           className={cn(
             "w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300 transition-transform duration-200",
-            !isTopExpanded && "-rotate-90"
+            !isTopExpanded && "-rotate-90",
           )}
         />
       </button>
@@ -628,26 +683,31 @@ export function AntigravityActionStream({
             transition={{ duration: 0.18, ease: EASING_CUBIC }}
             className="overflow-hidden space-y-0.5"
           >
-            {/* Sub-header (e.g. "Explored files, ran commands, edited files ⌵") */}
+            {/* Sub-header (e.g. "Explored files, ran commands, edited files ⌵" or "Reading push_to_github.bat ⌵") */}
             {(normalized.length > 0 || displayActiveStep) && (
               <button
                 type="button"
                 onClick={() => setIsExpanded((p) => !p)}
                 className="flex items-center gap-1.5 text-[12px] text-zinc-400 hover:text-zinc-200 transition-colors cursor-pointer select-none py-0.5 pl-3 group"
               >
-                <span className="font-sans tracking-tight">
-                  {summaryLabel}
+                <span
+                  className={cn(
+                    "font-sans tracking-tight",
+                    isStreaming && activeItem && "thinking-text-shimmer",
+                  )}
+                >
+                  {liveSubHeader}
                 </span>
                 <ChevronDown
                   className={cn(
                     "w-3.5 h-3.5 text-zinc-500 group-hover:text-zinc-300 transition-transform duration-200",
-                    !isExpanded && "-rotate-90"
+                    !isExpanded && "-rotate-90",
                   )}
                 />
               </button>
             )}
 
-            {/* Indented Live Step-by-Step Operation Stream (Matching Screenshot 2) */}
+            {/* Indented Live Step-by-Step Operation Stream (Matching Screenshot 1 & 2) */}
             <AnimatePresence>
               {isExpanded && (
                 <motion.div
@@ -671,9 +731,7 @@ export function AntigravityActionStream({
                           </span>
 
                           {item.fileType && (
-                            <span className="shrink-0">
-                              {getFileTypeBadge(item.target).badge}
-                            </span>
+                            <span className="shrink-0">{getFileTypeBadge(item.target).badge}</span>
                           )}
 
                           <button
@@ -693,64 +751,93 @@ export function AntigravityActionStream({
 
                           {item.addedCount !== undefined && (
                             <div className="flex items-center gap-1 font-mono text-[11px] shrink-0 ml-auto">
-                              <span className="text-emerald-400 font-medium">+{item.addedCount}</span>
-                              <span className="text-rose-400/90 font-medium">-{item.removedCount ?? 0}</span>
+                              <span className="text-emerald-400 font-medium">
+                                +{item.addedCount}
+                              </span>
+                              <span className="text-rose-400/90 font-medium">
+                                -{item.removedCount ?? 0}
+                              </span>
                             </div>
                           )}
                         </div>
                       );
                     }
 
-                    // Terminal command or task
-                    const cmdText = item.target.startsWith("Checked task") || item.target.endsWith("finished")
-                      ? item.target
-                      : item.target.startsWith("Ran")
-                      ? item.target
-                      : `Ran ${item.target}`;
+                    // Terminal command or task with progressive click-to-expand disclosure (Screenshot 3 & 4)
+                    const cmdText =
+                      item.target.startsWith("Checked task") || item.target.endsWith("finished")
+                        ? item.target
+                        : item.target.startsWith("Ran")
+                          ? item.target
+                          : `Ran ${item.target}`;
+
+                    const isItemExpanded = expandedItemIds.has(item.id);
+                    const hasOutput = Boolean(item.output && item.output.trim());
 
                     return (
-                      <div
-                        key={item.id}
-                        className="flex items-center gap-1.5 py-0.5 text-[12px] leading-snug text-zinc-400 font-sans group select-none"
-                      >
-                        <span className="truncate max-w-[360px]">
-                          {cmdText}
-                        </span>
-                        <span className="text-zinc-600 text-[11px] shrink-0">&gt;</span>
+                      <div key={item.id} className="py-0.5 group">
+                        <button
+                          type="button"
+                          onClick={() => (hasOutput ? toggleItemOutput(item.id) : undefined)}
+                          className={cn(
+                            "flex items-center gap-1.5 text-[12px] leading-snug font-sans select-none text-left w-full transition-colors",
+                            hasOutput
+                              ? "hover:text-zinc-200 cursor-pointer text-zinc-400"
+                              : "text-zinc-400 cursor-default",
+                          )}
+                        >
+                          <span className="truncate max-w-[360px]">{cmdText}</span>
+                          <span className="text-zinc-600 text-[11px] shrink-0 ml-0.5 group-hover:text-zinc-400 transition-colors">
+                            {isItemExpanded ? "⌵" : ">"}
+                          </span>
+                        </button>
+                        {isItemExpanded && hasOutput && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            className="mt-1 ml-3 p-2.5 rounded bg-[#101012] border border-white/5 font-mono text-[11px] leading-relaxed text-zinc-300 max-h-56 overflow-y-auto whitespace-pre-wrap select-text shadow-inner"
+                          >
+                            {item.output}
+                          </motion.div>
+                        )}
                       </div>
                     );
                   })}
 
-                  {/* Live active running step (e.g. ◉ Analyzing ... / ◉ Ran ...) */}
+                  {/* Live active running step matching Screenshot 2 */}
                   {activeItem && activeItem.status === "running" && (
                     <motion.div
                       key={`active-${activeItem.id}`}
                       initial={{ opacity: 0, y: 3 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="flex items-center gap-2 py-0.5 text-[12px] leading-snug select-none"
+                      className="my-1 rounded-md bg-white/[0.04] border border-white/5 px-2.5 py-1.5 flex items-center justify-between select-none"
                     >
-                      <span className="relative flex h-2.5 w-2.5 items-center justify-center shrink-0">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-60" />
-                        <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cyan-400 thinking-dot-glow" />
-                      </span>
-                      <span className="text-zinc-400 font-sans shrink-0">
-                        {activeItem.label}
-                      </span>
-                      {activeItem.fileType && (
-                        <span className="shrink-0">{getFileTypeBadge(activeItem.target).badge}</span>
-                      )}
-                      <span className="thinking-text-shimmer text-[12px] font-mono truncate max-w-[280px]">
-                        {activeItem.fileName || activeItem.target}
-                      </span>
-                      {activeItem.lineRange && (
-                        <span className="font-mono text-[11px] text-zinc-500 shrink-0">
-                          {activeItem.lineRange}
+                      <div className="flex items-center gap-2 text-[12px] font-sans text-zinc-300 truncate">
+                        <span className="relative flex h-2 w-2 items-center justify-center shrink-0">
+                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-60" />
+                          <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-cyan-400 thinking-dot-glow" />
                         </span>
-                      )}
+                        <span className="text-zinc-400 shrink-0">{activeItem.label}</span>
+                        {activeItem.fileType && (
+                          <span className="shrink-0">
+                            {getFileTypeBadge(activeItem.target).badge}
+                          </span>
+                        )}
+                        <span className="thinking-text-shimmer text-[12px] font-mono truncate max-w-[280px]">
+                          {activeItem.fileName || activeItem.target}
+                        </span>
+                        {activeItem.lineRange && (
+                          <span className="font-mono text-[11px] text-zinc-500 shrink-0">
+                            {activeItem.lineRange}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-zinc-500 text-[11px] shrink-0">&gt;</span>
                     </motion.div>
                   )}
 
-                  {/* Fallback active step override (e.g. ◉ Analyzing project structure / ◉ Checked task ...) */}
+                  {/* Fallback active step override */}
                   {!activeItem && displayActiveStep && (
                     <motion.div
                       key="live-fallback-step"
@@ -766,6 +853,13 @@ export function AntigravityActionStream({
                         {displayActiveStep}
                       </span>
                     </motion.div>
+                  )}
+
+                  {/* Working indicator matching Screenshot 1 */}
+                  {isStreaming && (
+                    <div className="flex items-center gap-2 py-0.5 text-[12px] text-zinc-400 font-sans select-none">
+                      <span className="thinking-text-shimmer">Working</span>
+                    </div>
                   )}
                 </motion.div>
               )}
@@ -795,15 +889,62 @@ export function AntigravityActionStream({
   );
 }
 
+interface RawToolCardLike {
+  toolName?: string;
+  summary?: string;
+  toolSummary?: string;
+  risk?: "read" | "write" | "exec" | "none";
+  args?: {
+    query?: string;
+    pattern?: string;
+    Query?: string;
+    path?: string;
+    filePath?: string;
+    AbsolutePath?: string;
+    TargetFile?: string;
+    file_path?: string;
+    startLine?: number;
+    StartLine?: number;
+    endLine?: number;
+    EndLine?: number;
+    lineRange?: string;
+    ReplacementContent?: string;
+    TargetContent?: string;
+    command?: string;
+    CommandLine?: string;
+    toolSummary?: string;
+    summary?: string;
+    description?: string;
+    [key: string]: unknown;
+  };
+  result?: {
+    output?: string;
+    matches?: unknown[];
+    data?: unknown[];
+    totalResults?: number;
+    count?: number;
+    success?: boolean;
+    diff?: {
+      path?: string;
+      addedCount?: number;
+      removedCount?: number;
+      additions?: number;
+      deletions?: number;
+    };
+    [key: string]: unknown;
+  };
+  status?: "running" | "completed" | "failed";
+}
+
 /**
  * Converts raw ToolCallCards into AntigravityStreamItems for authentic rendering
  */
-export function toolCardsToActionStream(cards: any[]): AntigravityStreamItem[] {
+export function toolCardsToActionStream(cards: unknown[]): AntigravityStreamItem[] {
   if (!cards || cards.length === 0) return [];
   const result: AntigravityStreamItem[] = [];
 
   for (let i = 0; i < cards.length; i++) {
-    const c = cards[i];
+    const c = cards[i] as RawToolCardLike | undefined;
     if (!c) continue;
     const name = (c.toolName || "").toLowerCase();
 
@@ -844,12 +985,7 @@ export function toolCardsToActionStream(cards: any[]): AntigravityStreamItem[] {
       name.includes("exec");
 
     if (isSearch) {
-      const query =
-        c.args?.query ||
-        c.args?.pattern ||
-        c.args?.Query ||
-        c.args?.path ||
-        name;
+      const query = c.args?.query || c.args?.pattern || c.args?.Query || c.args?.path || name;
       let count: number | undefined = undefined;
       if (Array.isArray(c.result)) count = c.result.length;
       else if (Array.isArray(c.result?.matches)) count = c.result.matches.length;
@@ -876,17 +1012,15 @@ export function toolCardsToActionStream(cards: any[]): AntigravityStreamItem[] {
         (name.includes("analyze") ? "workspace" : "");
       const fileName = target
         ? target.split("/").pop() || target
-        : (name.includes("analyze") ? "workspace" : "file");
+        : name.includes("analyze")
+          ? "workspace"
+          : "file";
       const start = c.args?.startLine || c.args?.StartLine;
       const end = c.args?.endLine || c.args?.EndLine;
       const lineRange = start && end ? `#L${start}-${end}` : c.args?.lineRange;
 
       const subType: AntigravityFileState =
-        c.status === "failed"
-          ? "failed"
-          : name.includes("analyze")
-            ? "analyzing"
-            : "reading";
+        c.status === "failed" ? "failed" : name.includes("analyze") ? "analyzing" : "reading";
 
       result.push({
         id: `file-read-${i}`,
@@ -912,15 +1046,11 @@ export function toolCardsToActionStream(cards: any[]): AntigravityStreamItem[] {
       const added =
         c.result?.diff?.addedCount ??
         c.result?.diff?.additions ??
-        (c.args?.ReplacementContent
-          ? c.args.ReplacementContent.split("\n").length
-          : 0);
+        (c.args?.ReplacementContent ? c.args.ReplacementContent.split("\n").length : 0);
       const removed =
         c.result?.diff?.removedCount ??
         c.result?.diff?.deletions ??
-        (c.args?.TargetContent
-          ? c.args.TargetContent.split("\n").length
-          : 0);
+        (c.args?.TargetContent ? c.args.TargetContent.split("\n").length : 0);
 
       const subType: AntigravityFileState =
         c.status === "failed"
@@ -944,8 +1074,7 @@ export function toolCardsToActionStream(cards: any[]): AntigravityStreamItem[] {
         timestamp: Date.now() - (cards.length - i) * 60,
       });
     } else if (isDelete) {
-      const filePath =
-        c.args?.path || c.args?.filePath || c.args?.file_path || "";
+      const filePath = c.args?.path || c.args?.filePath || c.args?.file_path || "";
       const fileName = filePath ? filePath.split("/").pop() || filePath : "file";
       result.push({
         id: `file-del-${i}`,
@@ -958,7 +1087,10 @@ export function toolCardsToActionStream(cards: any[]): AntigravityStreamItem[] {
         timestamp: Date.now() - (cards.length - i) * 60,
       });
     } else if (isExec) {
+      const summary =
+        c.summary || c.toolSummary || c.args?.toolSummary || c.args?.description || c.args?.summary;
       const cmd =
+        summary ||
         c.args?.command ||
         c.args?.CommandLine ||
         (typeof c.args === "string" ? c.args : "");
